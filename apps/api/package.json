@@ -1,0 +1,21 @@
+{
+  "name": "@profesiograma/api",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 execute profesiograma-db --file=src/db/schema.sql",
+    "db:migrate:local": "wrangler d1 execute profesiograma-db --local --file=src/db/schema.sql",
+    "db:seed": "wrangler d1 execute profesiograma-db --local --file=src/db/seed.sql"
+  },
+  "dependencies": {
+    "hono": "^4.4.0",
+    "@profesiograma/shared-types": "*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240620.0",
+    "typescript": "^5.4.0",
+    "wrangler": "^3.60.0"
+  }
+}

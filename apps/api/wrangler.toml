@@ -1,0 +1,31 @@
+name = "profesiograma-api"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# ==============================================================
+# CLOUDFLARE D1 DATABASE
+# Pasos:
+# 1. Ejecuta: wrangler d1 create profesiograma-db
+# 2. Copia el database_id generado abajo
+# ==============================================================
+[[d1_databases]]
+binding = "DB"
+database_name = "profesiograma-db"
+database_id = "REEMPLAZAR_CON_TU_DATABASE_ID"
+
+# ==============================================================
+# SECRETS (configurar con: wrangler secret put NOMBRE)
+# - GEMINI_API_KEY
+# - JWT_SECRET  (mínimo 32 caracteres aleatorios)
+# ==============================================================
+
+[vars]
+ENVIRONMENT = "production"
+CORS_ORIGIN = "https://profesiograma.pages.dev"
+
+# Desarrollo local
+[env.local]
+[env.local.vars]
+ENVIRONMENT = "development"
+CORS_ORIGIN = "http://localhost:5173"
