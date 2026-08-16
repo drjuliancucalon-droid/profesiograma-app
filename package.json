@@ -1,0 +1,22 @@
+{
+  "name": "profesiograma-app",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "cd apps/api && wrangler dev",
+    "dev:web": "cd apps/web && npm run dev",
+    "build:web": "cd apps/web && npm run build",
+    "deploy:api": "cd apps/api && wrangler deploy",
+    "db:create": "wrangler d1 create profesiograma-db",
+    "db:migrate": "wrangler d1 execute profesiograma-db --file=apps/api/src/db/schema.sql",
+    "db:migrate:local": "wrangler d1 execute profesiograma-db --local --file=apps/api/src/db/schema.sql"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "wrangler": "^3.60.0"
+  }
+}
