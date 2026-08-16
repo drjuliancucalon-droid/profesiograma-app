@@ -1,144 +1,115 @@
-// ==============================================================
-// D1 QUERIES — Tipadas y reutilizables
-// ==============================================================
-
 import type { D1Database } from '@cloudflare/workers-types';
 
-// --- USERS ---
-export const userQueries = {
-  findByEmail: (db: D1Database, email: string) =>
-    db.prepare('SELECT * FROM users WHERE email = ? AND activo = 1').bind(email).first(),
+// ─── AUTH ────────────────────────────────────────────────────
+export async function findUserByEmail(db: D1Database, email: string) {
+  return db.prepare('SELECT * FROM users WHERE email = ? AND is_active = 1').bind(email).first();
+}
 
-  findById: (db: D1Database, id: string) =>
-    db.prepare('SELECT id, email, nombre, rol, empresa_id, created_at FROM users WHERE id = ?').bind(id).first(),
+export async function findUserById(db: D1Database, id: string) {
+  return db.prepare('SELECT id, email, full_name, role, empresa_id FROM users WHERE id = ? AND is_active = 1').bind(id).first();
+}
 
-  create: (db: D1Database, data: {
-    id: string; email: string; password_hash: string;
-    nombre: string; rol: string; empresa_id?: string;
-  }) =>
-    db.prepare(`
-      INSERT INTO users (id, email, password_hash, nombre, rol, empresa_id)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).bind(data.id, data.email, data.password_hash, data.nombre, data.rol, data.empresa_id ?? null).run(),
-};
+export async function createSession(db: D1Database, userId: string, refreshToken: string, expiresAt: string) {
+  return db.prepare(
+    'INSERT INTO sessions (user_id, refresh_token, expires_at) VALUES (?, ?, ?)'
+  ).bind(userId, refreshToken, expiresAt).run();
+}
 
-// --- SESSIONS ---
-export const sessionQueries = {
-  create: (db: D1Database, userId: string, tokenHash: string, expiresAt: string) =>
-    db.prepare(`
-      INSERT INTO sessions (user_id, token_hash, expires_at)
-      VALUES (?, ?, ?)
-    `).bind(userId, tokenHash, expiresAt).run(),
+export async function findSession(db: D1Database, refreshToken: string) {
+  return db.prepare(
+    'SELECT s.*, u.email, u.full_name, u.role FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.refresh_token = ? AND s.expires_at > datetime("now")'
+  ).bind(refreshToken).first();
+}
 
-  findByTokenHash: (db: D1Database, tokenHash: string) =>
-    db.prepare(`
-      SELECT s.*, u.id as uid, u.email, u.nombre, u.rol, u.empresa_id
-      FROM sessions s JOIN users u ON s.user_id = u.id
-      WHERE s.token_hash = ? AND s.expires_at > datetime('now') AND u.activo = 1
-    `).bind(tokenHash).first(),
+export async function deleteSession(db: D1Database, refreshToken: string) {
+  return db.prepare('DELETE FROM sessions WHERE refresh_token = ?').bind(refreshToken).run();
+}
 
-  deleteExpired: (db: D1Database) =>
-    db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')").run(),
-};
+// ─── EMPRESAS ────────────────────────────────────────────────
+export async function getEmpresas(db: D1Database) {
+  return db.prepare('SELECT * FROM empresas ORDER BY nombre ASC').all();
+}
 
-// --- EMPRESAS ---
-export const empresaQueries = {
-  findAll: (db: D1Database) =>
-    db.prepare('SELECT * FROM empresas ORDER BY nombre ASC').all(),
+export async function createEmpresa(db: D1Database, data: { nombre: string; nit?: string; responsable?: string }) {
+  return db.prepare(
+    'INSERT INTO empresas (nombre, nit, responsable) VALUES (?, ?, ?) RETURNING *'
+  ).bind(data.nombre, data.nit ?? null, data.responsable ?? null).first();
+}
 
-  findById: (db: D1Database, id: string) =>
-    db.prepare('SELECT * FROM empresas WHERE id = ?').bind(id).first(),
+// ─── PROFESIOGRAMAS ──────────────────────────────────────────
+export async function getProfesiogramasByEmpresa(db: D1Database, empresaId: string) {
+  return db.prepare(
+    `SELECT p.*, e.nombre as empresa_nombre, pr.nombre as profesional_nombre
+     FROM profesiogramas p
+     JOIN empresas e ON p.empresa_id = e.id
+     JOIN profesionales pr ON p.profesional_id = pr.id
+     WHERE p.empresa_id = ?
+     ORDER BY p.created_at DESC`
+  ).bind(empresaId).all();
+}
 
-  create: (db: D1Database, data: { nombre: string; nit?: string; responsable?: string }) =>
-    db.prepare(`
-      INSERT INTO empresas (nombre, nit, responsable) VALUES (?, ?, ?)
-      RETURNING *
-    `).bind(data.nombre, data.nit ?? null, data.responsable ?? null).first(),
+export async function createProfesiograma(db: D1Database, data: {
+  empresa_id: string;
+  profesional_id: string;
+  created_by: string;
+}) {
+  return db.prepare(
+    'INSERT INTO profesiogramas (empresa_id, profesional_id, created_by) VALUES (?, ?, ?) RETURNING *'
+  ).bind(data.empresa_id, data.profesional_id, data.created_by).first();
+}
 
-  update: (db: D1Database, id: string, data: { nombre?: string; nit?: string; responsable?: string }) =>
-    db.prepare(`
-      UPDATE empresas SET
-        nombre = COALESCE(?, nombre),
-        nit = COALESCE(?, nit),
-        responsable = COALESCE(?, responsable),
-        updated_at = datetime('now')
-      WHERE id = ? RETURNING *
-    `).bind(data.nombre ?? null, data.nit ?? null, data.responsable ?? null, id).first(),
-};
+export async function saveProfesiogramaSnapshot(db: D1Database, data: {
+  profesiograma_id: string;
+  version: number;
+  snapshot_json: string;
+  changed_by: string;
+  cambio_desc?: string;
+}) {
+  return db.prepare(
+    'INSERT INTO historial_versiones (profesiograma_id, version, snapshot_json, changed_by, cambio_desc) VALUES (?, ?, ?, ?, ?)'
+  ).bind(data.profesiograma_id, data.version, data.snapshot_json, data.changed_by, data.cambio_desc ?? null).run();
+}
 
-// --- PROFESIOGRAMAS ---
-export const profesiogramaQueries = {
-  findByEmpresa: (db: D1Database, empresaId: string) =>
-    db.prepare(`
-      SELECT p.*, e.nombre as empresa_nombre
-      FROM profesiogramas p JOIN empresas e ON p.empresa_id = e.id
-      WHERE p.empresa_id = ? ORDER BY p.created_at DESC
-    `).bind(empresaId).all(),
+// ─── CARGOS ──────────────────────────────────────────────────
+export async function createCargo(db: D1Database, data: {
+  profesiograma_id: string;
+  grupo_ocupacional: string;
+  nombre_cargo: string;
+  descripcion?: string;
+  competencias?: string;
+  requisitos_fisicos?: string;
+  peligros_riesgos?: string;
+  ia_raw_json?: string;
+}) {
+  return db.prepare(
+    `INSERT INTO cargos (profesiograma_id, grupo_ocupacional, nombre_cargo, descripcion, competencias, requisitos_fisicos, peligros_riesgos, ia_raw_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`
+  ).bind(
+    data.profesiograma_id, data.grupo_ocupacional, data.nombre_cargo,
+    data.descripcion ?? null, data.competencias ?? null,
+    data.requisitos_fisicos ?? null, data.peligros_riesgos ?? null,
+    data.ia_raw_json ?? null
+  ).first();
+}
 
-  findById: (db: D1Database, id: string) =>
-    db.prepare('SELECT * FROM profesiogramas WHERE id = ?').bind(id).first(),
-
-  create: (db: D1Database, data: {
-    empresa_id: string; profesional_id: string; fecha: string;
-  }) =>
-    db.prepare(`
-      INSERT INTO profesiogramas (empresa_id, profesional_id, fecha)
-      VALUES (?, ?, ?) RETURNING *
-    `).bind(data.empresa_id, data.profesional_id, data.fecha).first(),
-
-  updateEstado: (db: D1Database, id: string, estado: string) =>
-    db.prepare(`
-      UPDATE profesiogramas SET estado = ?, updated_at = datetime('now')
-      WHERE id = ? RETURNING *
-    `).bind(estado, id).first(),
-};
-
-// --- CARGOS ---
-export const cargoQueries = {
-  findByProfesiograma: (db: D1Database, profesiogramaId: string) =>
-    db.prepare('SELECT * FROM cargos WHERE profesiograma_id = ? ORDER BY created_at ASC').bind(profesiogramaId).all(),
-
-  upsert: (db: D1Database, data: {
-    id?: string; profesiograma_id: string; grupo_ocupacional: string; cargo: string;
-    perfil_descripcion?: string; perfil_competencias?: string; perfil_requisitos?: string;
-    peligros_riesgos?: string; matriz_json: string; observaciones_json: string;
-    fundamentacion_json: string; restricciones_json: string;
-  }) =>
-    db.prepare(`
-      INSERT INTO cargos (
-        profesiograma_id, grupo_ocupacional, cargo,
-        perfil_descripcion, perfil_competencias, perfil_requisitos,
-        peligros_riesgos, matriz_json, observaciones_json,
-        fundamentacion_json, restricciones_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      RETURNING *
-    `).bind(
-      data.profesiograma_id, data.grupo_ocupacional, data.cargo,
-      data.perfil_descripcion ?? null, data.perfil_competencias ?? null, data.perfil_requisitos ?? null,
-      data.peligros_riesgos ?? null, data.matriz_json, data.observaciones_json,
-      data.fundamentacion_json, data.restricciones_json
-    ).first(),
-};
-
-// --- HISTORIAL ---
-export const historialQueries = {
-  create: (db: D1Database, data: {
-    profesiograma_id: string; version: number;
-    snapshot_json: string; modificado_por: string; motivo?: string;
-  }) =>
-    db.prepare(`
-      INSERT INTO historial_versiones
-      (profesiograma_id, version, snapshot_json, modificado_por, motivo)
-      VALUES (?, ?, ?, ?, ?)
-    `).bind(
-      data.profesiograma_id, data.version, data.snapshot_json,
-      data.modificado_por, data.motivo ?? null
-    ).run(),
-
-  findByProfesiograma: (db: D1Database, profesiogramaId: string) =>
-    db.prepare(`
-      SELECT h.*, u.nombre as modificado_por_nombre
-      FROM historial_versiones h JOIN users u ON h.modificado_por = u.id
-      WHERE h.profesiograma_id = ? ORDER BY h.version DESC
-    `).bind(profesiogramaId).all(),
-};
+export async function saveMatrizExamenes(db: D1Database, cargoId: string, examenes: Array<{
+  examen: string;
+  momento_i: boolean; momento_p: boolean; momento_r: boolean;
+  momento_pi: boolean; momento_rl: boolean;
+  observacion?: string;
+  obligatorio?: boolean;
+}>) {
+  const stmt = db.prepare(
+    `INSERT INTO matriz_examenes (cargo_id, examen, momento_i, momento_p, momento_r, momento_pi, momento_rl, observacion, obligatorio)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const batch = examenes.map(e =>
+    stmt.bind(
+      cargoId, e.examen,
+      e.momento_i ? 1 : 0, e.momento_p ? 1 : 0, e.momento_r ? 1 : 0,
+      e.momento_pi ? 1 : 0, e.momento_rl ? 1 : 0,
+      e.observacion ?? null, e.obligatorio ? 1 : 0
+    )
+  );
+  return db.batch(batch);
+}
