@@ -5,7 +5,7 @@ async function getKey(secret: string): Promise<CryptoKey> {
   return crypto.subtle.importKey('raw', enc.encode(secret), ALG, false, ['sign', 'verify']);
 }
 
-function b64url(buf: ArrayBuffer): string {
+function b64url(buf: ArrayBuffer | Uint8Array): string {
   return btoa(String.fromCharCode(...new Uint8Array(buf)))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }

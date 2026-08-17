@@ -7,7 +7,7 @@ export function HistorialPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get<unknown[]>('/profesiogramas').then(res => {
+    api.get<{ success: boolean; data?: unknown[] }>('/profesiograma').then(res => {
       if (res.success && res.data) setData(res.data);
     }).finally(() => setLoading(false));
   }, []);

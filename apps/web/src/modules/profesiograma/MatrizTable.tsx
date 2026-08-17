@@ -52,7 +52,7 @@ export function MatrizTable() {
               {EXAMENES.map(e => (
                 <td key={e.key} style={{ textAlign: 'center' }}>
                   <MomentoBadge
-                    data={(row.matriz as Record<string, Record<string, boolean>>)?.[e.key] ?? {}}
+                    data={(row.matriz as unknown as Record<string, Record<string, boolean>>)?.[e.key] ?? {}}
                     onChange={(key, val) => toggleMomento(idx, e.key, key, val)}
                   />
                   {(row.matrizObservaciones as Record<string, string>)?.[e.key] && (

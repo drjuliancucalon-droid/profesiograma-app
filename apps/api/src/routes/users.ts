@@ -10,7 +10,7 @@ users.use('*', requireAuth);
 // GET /api/users
 users.get('/', requireRole('admin'), async (c) => {
   const { results } = await c.env.DB
-    .prepare('SELECT id, email, full_name, rol, activo, creado_en FROM users ORDER BY full_name')
+    .prepare('SELECT id, email, nombre, rol, activo, creado_en FROM users ORDER BY nombre')
     .all();
   return c.json({ success: true, data: results });
 });
@@ -18,10 +18,10 @@ users.get('/', requireRole('admin'), async (c) => {
 // POST /api/users
 users.post('/', requireRole('admin'), async (c) => {
   const body = await c.req.json<{
-    email: string; password: string; full_name: string;
+    email: string; password: string; nombre: string;
     rol: 'admin' | 'medico' | 'rrhh';
   }>();
-  if (!body.email || !body.password || !body.full_name || !body.rol) {
+  if (!body.email || !body.password || !body.nombre || !body.rol) {
     return c.json({ success: false, error: 'Todos los campos son requeridos' }, 400);
   }
   const exists = await c.env.DB
@@ -33,9 +33,9 @@ users.post('/', requireRole('admin'), async (c) => {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   await c.env.DB.prepare(`
-    INSERT INTO users (id, email, full_name, rol, password_hash, salt, iterations, activo, creado_en, actualizado_en)
+    INSERT INTO users (id, email, nombre, rol, password_hash, password_salt, password_iterations, activo, creado_en, actualizado_en)
     VALUES (?,?,?,?,?,?,?,1,?,?)
-  `).bind(id, body.email, body.full_name, body.rol, hash, salt, iterations, now, now).run();
+  `).bind(id, body.email, body.nombre, body.rol, hash, salt, iterations, now, now).run();
   return c.json({ success: true, id }, 201);
 });
 

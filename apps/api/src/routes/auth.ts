@@ -18,16 +18,16 @@ auth.post('/login', async (c) => {
     .prepare('SELECT * FROM users WHERE email = ? AND activo = 1 LIMIT 1')
     .bind(email)
     .first<{
-      id: string; email: string; full_name: string; rol: string;
-      password_hash: string; salt: string; iterations: number;
+      id: string; email: string; nombre: string; rol: string;
+      password_hash: string; password_salt: string; password_iterations: number;
     }>();
 
   if (!user) return c.json({ success: false, error: 'Credenciales inválidas' }, 401);
 
   const valid = await verifyPassword(password, {
     hash: user.password_hash,
-    salt: user.salt,
-    iterations: user.iterations,
+    salt: user.password_salt,
+    iterations: user.password_iterations,
   });
   if (!valid) return c.json({ success: false, error: 'Credenciales inválidas' }, 401);
 
@@ -39,7 +39,7 @@ auth.post('/login', async (c) => {
   const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
 
   await c.env.DB
-    .prepare('INSERT INTO sessions (id, user_id, token, expires_at, creado_en) VALUES (?,?,?,?,?)')
+    .prepare('INSERT INTO sessions (id, user_id, refresh_token, expires_at, creado_en) VALUES (?,?,?,?,?)')
     .bind(newId(), user.id, refreshToken, expiresAt, nowIso())
     .run();
 
@@ -47,7 +47,7 @@ auth.post('/login', async (c) => {
     success: true,
     access_token: accessToken,
     refresh_token: refreshToken,
-    user: { id: user.id, email: user.email, full_name: user.full_name, rol: user.rol },
+    user: { id: user.id, email: user.email, nombre: user.nombre, rol: user.rol },
   });
 });
 
@@ -61,7 +61,7 @@ auth.post('/refresh', async (c) => {
     .prepare(`
       SELECT s.*, u.email, u.rol, u.activo
       FROM sessions s JOIN users u ON u.id = s.user_id
-      WHERE s.token = ? AND s.expires_at > datetime('now') LIMIT 1
+      WHERE s.refresh_token = ? AND s.revoked = 0 AND s.expires_at > datetime('now') LIMIT 1
     `)
     .bind(refresh_token)
     .first<{ user_id: string; email: string; rol: string; activo: number }>();
@@ -81,7 +81,7 @@ auth.post('/refresh', async (c) => {
 auth.post('/logout', async (c) => {
   const body = await c.req.json<{ refresh_token?: string }>();
   if (body.refresh_token) {
-    await c.env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(body.refresh_token).run();
+    await c.env.DB.prepare('UPDATE sessions SET revoked = 1 WHERE refresh_token = ?').bind(body.refresh_token).run();
   }
   return c.json({ success: true, message: 'Sesión cerrada' });
 });
@@ -93,9 +93,9 @@ auth.get('/me', async (c) => {
   const payload = await verifyJwt(c.env.JWT_SECRET, header.slice(7));
   if (!payload) return c.json({ success: false, error: 'Token inválido' }, 401);
   const user = await c.env.DB
-    .prepare('SELECT id, email, full_name, rol FROM users WHERE id = ? LIMIT 1')
+    .prepare('SELECT id, email, nombre, rol FROM users WHERE id = ? LIMIT 1')
     .bind(payload.sub as string)
-    .first<{ id: string; email: string; full_name: string; rol: string }>();
+    .first<{ id: string; email: string; nombre: string; rol: string }>();
   if (!user) return c.json({ success: false, error: 'Usuario no encontrado' }, 404);
   return c.json({ success: true, user });
 });

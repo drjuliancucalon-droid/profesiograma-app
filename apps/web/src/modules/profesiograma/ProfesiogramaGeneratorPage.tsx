@@ -37,11 +37,11 @@ export function ProfesiogramaGeneratorPage() {
     for (const job of jobsList) {
       const existing = generatedData.find(d => d.cargo === job);
       if (existing) { results.push(existing); continue; }
-      const res = await api.post<CargoProfesiograma>('/profesiogramas/generate', { cargo: job });
+      const res = await api.post<{ success: boolean; data?: CargoProfesiograma }>('/profesiograma/generate', { cargo: job });
       if (res.success && res.data) {
         results.push(res.data);
       } else {
-        results.push({ grupoOcupacional: 'Revisar', cargo: job, perfilCargo: { descripcion: 'Error IA', competencias: '', requisitosFisicos: '' }, peligrosRiesgos: 'Revisar', matriz: { fisico: { I: true, P: false, R: false, PI: false, RL: false }, osteomuscular: { I: true, P: false, R: false, PI: false, RL: false }, psicosensometrico: { I: false, P: false, R: false, PI: false, RL: false }, audiometria: { I: false, P: false, R: false, PI: false, RL: false }, visiometria: { I: false, P: false, R: false, PI: false, RL: false }, electrocardiograma: { I: false, P: false, R: false, PI: false, RL: false }, glicemia: { I: false, P: false, R: false, PI: false, RL: false }, perfilLipidico: { I: false, P: false, R: false, PI: false, RL: false }, laboratorio: '' }, matrizObservaciones: {}, fundamentacionTecnica: { porqueMomentos: 'Error IA', obligatorios: [], electivos: [] }, recomendacionesRestricciones: [] });
+        results.push({ grupoOcupacional: 'Revisar', cargo: job, perfilCargo: { descripcion: 'Error IA', competencias: '', requisitosFisicos: '' }, peligrosRiesgos: 'Revisar', matriz: { fisico: { I: true, P: false, R: false, PI: false, RL: false }, osteomuscular: { I: true, P: false, R: false, PI: false, RL: false }, psicosensometrico: { I: false, P: false, R: false, PI: false, RL: false }, audiometria: { I: false, P: false, R: false, PI: false, RL: false }, visiometria: { I: false, P: false, R: false, PI: false, RL: false }, electrocardiograma: { I: false, P: false, R: false, PI: false, RL: false }, glicemia: { I: false, P: false, R: false, PI: false, RL: false }, perfillipidico: { I: false, P: false, R: false, PI: false, RL: false }, laboratorio: '' }, matrizObservaciones: {}, fundamentacionTecnica: { porqueMomentos: 'Error IA', obligatorios: [], electivos: [] }, recomendacionesRestricciones: [] });
       }
     }
     setGeneratedData(results);

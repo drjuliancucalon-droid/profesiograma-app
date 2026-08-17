@@ -18,7 +18,7 @@ export function EmpresaForm() {
             </label>
             <input
               type={k === 'fecha' ? 'date' : 'text'}
-              value={String((empresaInfo as Record<string, string>)[k] ?? '')}
+              value={String((empresaInfo as unknown as Record<string, string>)[k] ?? '')}
               onChange={e => setEmpresaInfo({ [k]: e.target.value })}
               style={{ width: '100%', padding: '8px 10px', background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', color: 'var(--color-text)', fontSize: '0.85rem', outline: 'none' }}
             />
