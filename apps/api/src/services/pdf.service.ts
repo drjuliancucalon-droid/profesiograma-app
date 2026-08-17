@@ -104,7 +104,7 @@ function buildProfesiogramaHtml(data: PdfData): string {
   }).join('');
 
   const fundamentacionBlocks = cargos.map((cd) => `
-    <div style="border-bottom:1px solid #e5e7eb;padding:10px 0;">
+    <div style="border-bottom:1px solid #e5e7eb;padding:10px 0;page-break-inside:avoid;break-inside:avoid;">
       <h4 style="margin:0 0 6px;color:#4338ca;text-transform:uppercase;font-size:10px;">${esc(cd.cargo)}</h4>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:9px;">
         <div style="font-style:italic;color:#555;">
@@ -112,11 +112,11 @@ function buildProfesiogramaHtml(data: PdfData): string {
           ${esc(cd.fundamentacion_tecnica?.por_que_momentos)}
         </div>
         <div>
-          <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px;padding:6px;margin-bottom:6px;">
+          <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px;padding:6px;margin-bottom:6px;page-break-inside:avoid;break-inside:avoid;">
             <b style="display:block;text-transform:uppercase;font-size:8px;color:#065f46;">Obligatorios</b>
             <span style="color:#065f46;">${(cd.fundamentacion_tecnica?.obligatorios ?? []).map(esc).join(', ') || '—'}</span>
           </div>
-          <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px;">
+          <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px;page-break-inside:avoid;break-inside:avoid;">
             <b style="display:block;text-transform:uppercase;font-size:8px;color:#92400e;">Electivos</b>
             <span style="color:#92400e;">${(cd.fundamentacion_tecnica?.electivos ?? []).map(esc).join(', ') || '—'}</span>
           </div>
@@ -177,6 +177,7 @@ function buildProfesiogramaHtml(data: PdfData): string {
   table.matriz { width: 100%; border-collapse: collapse; font-size: 8px; table-layout: fixed; }
   table.matriz th { background: #1e293b; color: #fff; padding: 5px 3px; font-size: 7px; text-transform: uppercase; white-space: normal; word-break: break-word; line-height: 1.2; }
   table.matriz td { border: 1px solid #ccc; padding: 5px 4px; vertical-align: top; }
+  table.matriz tr { page-break-inside: avoid; break-inside: avoid; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 16px; }
 </style>
 </head>
