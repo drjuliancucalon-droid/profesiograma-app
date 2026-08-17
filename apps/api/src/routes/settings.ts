@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import type { HonoEnv } from '../types/env';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { encrypt, decrypt } from '../lib/crypto';
+import { parseBody } from '../lib/validate';
+import { aiKeysSchema } from '../lib/schemas';
 
 const settings = new Hono<HonoEnv>();
 
@@ -48,12 +50,9 @@ settings.get('/ai-keys', async (c) => {
 
 // PUT /api/settings/ai-keys — actualiza solo los campos enviados (no vacíos), cifrados
 settings.put('/ai-keys', async (c) => {
-  const body = await c.req.json<{
-    gemini_api_key?: string;
-    openrouter_api_key?: string;
-    mistral_api_key?: string;
-    primary_provider?: 'gemini' | 'openrouter' | 'mistral';
-  }>();
+  const parsed = await parseBody(c, aiKeysSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
   const user = c.get('user');
   const now = new Date().toISOString();
 

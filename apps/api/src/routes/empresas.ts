@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import type { HonoEnv } from '../types/env';
 import { requireAuth, requireRole } from '../middleware/auth';
+import { parseBody } from '../lib/validate';
+import { empresaSchema } from '../lib/schemas';
 
 const empresas = new Hono<HonoEnv>();
 
@@ -20,10 +22,9 @@ empresas.get('/:id', async (c) => {
 });
 
 empresas.post('/', requireRole('admin', 'medico'), async (c) => {
-  const body = await c.req.json<{
-    nombre: string; nit?: string; logo_url?: string; responsable?: string;
-  }>();
-  if (!body.nombre) return c.json({ success: false, error: 'nombre requerido' }, 400);
+  const parsed = await parseBody(c, empresaSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   await c.env.DB.prepare(`
@@ -37,7 +38,9 @@ empresas.post('/', requireRole('admin', 'medico'), async (c) => {
 });
 
 empresas.put('/:id', requireRole('admin'), async (c) => {
-  const body = await c.req.json<Record<string, string>>();
+  const parsed = await parseBody(c, empresaSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
   const now = new Date().toISOString();
   await c.env.DB.prepare(`
     UPDATE empresas SET nombre=?,nit=?,responsable=?,logo_url=?,actualizado_en=? WHERE id=?

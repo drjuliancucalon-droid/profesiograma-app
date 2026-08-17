@@ -3,16 +3,16 @@ import type { HonoEnv } from '../types/env';
 import { signJwt, verifyJwt } from '../lib/jwt';
 import { hashPassword, verifyPassword } from '../lib/password';
 import { newId, nowIso } from '../lib/id';
+import { parseBody } from '../lib/validate';
+import { loginSchema, refreshSchema, logoutSchema } from '../lib/schemas';
 
 const auth = new Hono<HonoEnv>();
 
 // POST /api/auth/login
 auth.post('/login', async (c) => {
-  const body = await c.req.json<{ email?: string; password?: string }>();
-  const { email, password } = body;
-  if (!email || !password) {
-    return c.json({ success: false, error: 'Email y contraseña requeridos' }, 400);
-  }
+  const parsed = await parseBody(c, loginSchema);
+  if (!parsed.ok) return parsed.response;
+  const { email, password } = parsed.data;
 
   const user = await c.env.DB
     .prepare('SELECT * FROM users WHERE email = ? AND activo = 1 LIMIT 1')
@@ -57,9 +57,9 @@ auth.post('/login', async (c) => {
 // antes de quedar inválido — el atacante y el usuario legítimo no pueden
 // ambos seguir usándolo indefinidamente.
 auth.post('/refresh', async (c) => {
-  const body = await c.req.json<{ refresh_token?: string }>();
-  const { refresh_token } = body;
-  if (!refresh_token) return c.json({ success: false, error: 'Refresh token requerido' }, 400);
+  const parsed = await parseBody(c, refreshSchema);
+  if (!parsed.ok) return parsed.response;
+  const { refresh_token } = parsed.data;
 
   const session = await c.env.DB
     .prepare(`
@@ -93,9 +93,10 @@ auth.post('/refresh', async (c) => {
 
 // POST /api/auth/logout
 auth.post('/logout', async (c) => {
-  const body = await c.req.json<{ refresh_token?: string }>();
-  if (body.refresh_token) {
-    await c.env.DB.prepare('UPDATE sessions SET revoked = 1 WHERE refresh_token = ?').bind(body.refresh_token).run();
+  const parsed = await parseBody(c, logoutSchema);
+  if (!parsed.ok) return parsed.response;
+  if (parsed.data.refresh_token) {
+    await c.env.DB.prepare('UPDATE sessions SET revoked = 1 WHERE refresh_token = ?').bind(parsed.data.refresh_token).run();
   }
   return c.json({ success: true, message: 'Sesión cerrada' });
 });

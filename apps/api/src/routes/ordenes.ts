@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import type { HonoEnv } from '../types/env';
 import { requireAuth } from '../middleware/auth';
+import { parseBody } from '../lib/validate';
+import { ordenSchema } from '../lib/schemas';
 
 const ordenes = new Hono<HonoEnv>();
 
@@ -53,18 +55,9 @@ ordenes.get('/:id', async (c) => {
 // POST /api/ordenes
 ordenes.post('/', async (c) => {
   const user = c.get('user');
-  const body = await c.req.json<{
-    profesiograma_id: string;
-    empresa_id: string;
-    cargo_id: string;
-    candidato_nombre?: string;
-    candidato_id?: string;
-    tipo_momento: 'I' | 'P' | 'R' | 'PI' | 'RL';
-    examenes_json?: unknown[];
-  }>();
-  if (!body.profesiograma_id || !body.empresa_id || !body.cargo_id || !body.tipo_momento) {
-    return c.json({ success: false, error: 'Faltan campos requeridos' }, 400);
-  }
+  const parsed = await parseBody(c, ordenSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
   const id  = crypto.randomUUID();
   const now = new Date().toISOString();
   await c.env.DB.prepare(`

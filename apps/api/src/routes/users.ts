@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import type { HonoEnv } from '../types/env';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { hashPassword } from '../lib/password';
+import { parseBody } from '../lib/validate';
+import { createUserSchema } from '../lib/schemas';
 
 const users = new Hono<HonoEnv>();
 
@@ -17,13 +19,9 @@ users.get('/', requireRole('admin'), async (c) => {
 
 // POST /api/users
 users.post('/', requireRole('admin'), async (c) => {
-  const body = await c.req.json<{
-    email: string; password: string; nombre: string;
-    rol: 'admin' | 'medico' | 'rrhh' | 'sst';
-  }>();
-  if (!body.email || !body.password || !body.nombre || !body.rol) {
-    return c.json({ success: false, error: 'Todos los campos son requeridos' }, 400);
-  }
+  const parsed = await parseBody(c, createUserSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
   const exists = await c.env.DB
     .prepare('SELECT id FROM users WHERE email = ? LIMIT 1')
     .bind(body.email).first();

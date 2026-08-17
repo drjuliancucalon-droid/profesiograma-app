@@ -3,6 +3,8 @@ import type { HonoEnv } from '../types/env';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { generateWithFallback } from '../lib/aiProviders';
 import { getAiKeys, getPrimaryProvider, providerOrder } from '../lib/settings';
+import { parseBody } from '../lib/validate';
+import { profesiogramaGenerateSchema, profesiogramaCreateSchema } from '../lib/schemas';
 
 const profesiograma = new Hono<HonoEnv>();
 
@@ -63,8 +65,9 @@ profesiograma.post(
   requireAuth,
   requireRole('admin', 'medico', 'sst'),
   async (c) => {
-    const { cargo } = await c.req.json<{ cargo?: string; profesiograma_id?: string }>();
-    if (!cargo) return c.json({ success: false, error: 'El campo cargo es requerido' }, 400);
+    const parsed = await parseBody(c, profesiogramaGenerateSchema);
+    if (!parsed.ok) return parsed.response;
+    const { cargo } = parsed.data;
     try {
       const [keys, primary] = await Promise.all([
         getAiKeys(c.env.DB, c.env),
@@ -93,19 +96,10 @@ profesiograma.post(
   requireRole('admin', 'medico'),
   async (c) => {
     const user = c.get('user');
-    const body = await c.req.json<{
-      empresa_id?: string;
-      profesional_id?: string;
-      fecha_emision?: string;
-      cargos_data?: Array<Record<string, unknown>>;
-    }>();
+    const parsed = await parseBody(c, profesiogramaCreateSchema);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
     const { empresa_id, profesional_id, cargos_data } = body;
-    if (!empresa_id || !profesional_id || !cargos_data?.length) {
-      return c.json(
-        { success: false, error: 'Faltan campos: empresa_id, profesional_id, cargos_data' },
-        400
-      );
-    }
     try {
       const profId = crypto.randomUUID();
       const now = new Date().toISOString();

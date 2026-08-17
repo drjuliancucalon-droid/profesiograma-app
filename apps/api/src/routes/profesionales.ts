@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import type { HonoEnv } from '../types/env';
 import { requireAuth } from '../middleware/auth';
+import { parseBody } from '../lib/validate';
+import { profesionalSchema } from '../lib/schemas';
 
 const profesionales = new Hono<HonoEnv>();
 
@@ -13,11 +15,9 @@ profesionales.get('/', async (c) => {
 
 // POST /api/profesionales — crea, o reutiliza si ya existe uno con la misma cédula
 profesionales.post('/', async (c) => {
-  const body = await c.req.json<{
-    nombre: string; cedula?: string; titulo?: string; licencia?: string;
-    celular?: string; correo?: string; firma_url?: string;
-  }>();
-  if (!body.nombre) return c.json({ success: false, error: 'nombre requerido' }, 400);
+  const parsed = await parseBody(c, profesionalSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
 
   if (body.cedula) {
     const existing = await c.env.DB
