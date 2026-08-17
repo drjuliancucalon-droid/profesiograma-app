@@ -19,9 +19,9 @@ export function LoginPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.post<{ success: boolean; access_token?: string; user?: User; error?: string }>('/auth/login', { email, password });
-      if (res.success && res.access_token && res.user) {
-        setAuth(res.access_token, res.user);
+      const res = await api.post<{ success: boolean; access_token?: string; refresh_token?: string; user?: User; error?: string }>('/auth/login', { email, password });
+      if (res.success && res.access_token && res.refresh_token && res.user) {
+        setAuth(res.access_token, res.refresh_token, res.user);
         navigate('/dashboard');
       } else {
         setError(res.error ?? 'Credenciales incorrectas');

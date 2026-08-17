@@ -52,6 +52,10 @@ auth.post('/login', async (c) => {
 });
 
 // POST /api/auth/refresh
+// Rota el refresh token en cada uso (single-use): el token recibido se revoca
+// y se emite uno nuevo. Así, si un refresh token se filtra, solo sirve una vez
+// antes de quedar inválido — el atacante y el usuario legítimo no pueden
+// ambos seguir usándolo indefinidamente.
 auth.post('/refresh', async (c) => {
   const body = await c.req.json<{ refresh_token?: string }>();
   const { refresh_token } = body;
@@ -59,22 +63,32 @@ auth.post('/refresh', async (c) => {
 
   const session = await c.env.DB
     .prepare(`
-      SELECT s.*, u.email, u.rol, u.activo
+      SELECT s.id as session_id, s.user_id, u.email, u.rol, u.activo
       FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.refresh_token = ? AND s.revoked = 0 AND s.expires_at > datetime('now') LIMIT 1
     `)
     .bind(refresh_token)
-    .first<{ user_id: string; email: string; rol: string; activo: number }>();
+    .first<{ session_id: string; user_id: string; email: string; rol: string; activo: number }>();
 
   if (!session || !session.activo) {
     return c.json({ success: false, error: 'Sesión inválida o expirada' }, 401);
   }
 
+  const newRefreshToken = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+
+  await c.env.DB.batch([
+    c.env.DB.prepare('UPDATE sessions SET revoked = 1 WHERE id = ?').bind(session.session_id),
+    c.env.DB
+      .prepare('INSERT INTO sessions (id, user_id, refresh_token, expires_at, creado_en) VALUES (?,?,?,?,?)')
+      .bind(newId(), session.user_id, newRefreshToken, expiresAt, nowIso()),
+  ]);
+
   const accessToken = await signJwt(c.env.JWT_SECRET, {
     sub: session.user_id, email: session.email, rol: session.rol,
   }, 3600);
 
-  return c.json({ success: true, access_token: accessToken });
+  return c.json({ success: true, access_token: accessToken, refresh_token: newRefreshToken });
 });
 
 // POST /api/auth/logout
