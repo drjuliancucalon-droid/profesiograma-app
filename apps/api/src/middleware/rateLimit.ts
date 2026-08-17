@@ -1,19 +1,18 @@
 import type { Context, Next } from 'hono';
 
-// Rate limit simple usando KV o memoria (Workers stateless — usar Durable Objects para producción real)
-const requestCounts = new Map<string, { count: number; reset: number }>();
+const store = new Map<string, { count: number; reset: number }>();
 
-export function rateLimitMiddleware(maxRequests = 30, windowMs = 60_000) {
+export function rateLimitMiddleware(max: number, windowMs: number) {
   return async (c: Context, next: Next) => {
-    const ip = c.req.header('CF-Connecting-IP') ?? 'unknown';
+    const key = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? 'unknown';
     const now = Date.now();
-    const entry = requestCounts.get(ip);
+    const entry = store.get(key);
     if (!entry || now > entry.reset) {
-      requestCounts.set(ip, { count: 1, reset: now + windowMs });
+      store.set(key, { count: 1, reset: now + windowMs });
     } else {
       entry.count++;
-      if (entry.count > maxRequests) {
-        return c.json({ error: 'Demasiadas solicitudes. Intenta en unos segundos.' }, 429);
+      if (entry.count > max) {
+        return c.json({ success: false, error: 'Demasiadas solicitudes, intenta más tarde.' }, 429);
       }
     }
     await next();

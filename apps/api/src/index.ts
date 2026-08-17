@@ -5,39 +5,41 @@ import { rateLimitMiddleware } from './middleware/rateLimit';
 import authRoutes from './routes/auth';
 import profesiogramaRoutes from './routes/profesiograma';
 import empresasRoutes from './routes/empresas';
-
-type Env = {
-  DB: D1Database;
-  JWT_SECRET: string;
-  GEMINI_API_KEY: string;
-  FRONTEND_URL: string;
-};
+import historialRoutes from './routes/historial';
+import usersRoutes from './routes/users';
+import ordenesRoutes from './routes/ordenes';
+import pdfRoutes from './routes/pdf';
+import type { Env } from './types/env';
 
 const app = new Hono<{ Bindings: Env }>();
 
-// ─── MIDDLEWARES GLOBALES ─────────────────────────────────────
+// ── Middlewares globales ──────────────────────────────────────
 app.use('*', logger());
 app.use('*', cors({
-  origin: (origin) => origin,  // Configurar con FRONTEND_URL en producción
+  origin: (origin, c) => c.env.CORS_ORIGIN ?? origin,
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
-app.use('/api/profesiograma/generate', rateLimitMiddleware(10, 60_000)); // 10 req/min para IA
+app.use('/api/profesiograma/generate', rateLimitMiddleware(10, 60_000));
 
-// ─── HEALTH CHECK ────────────────────────────────────────────
-app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
+// ── Health ────────────────────────────────────────────────────
+app.get('/health', c => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
-// ─── RUTAS ───────────────────────────────────────────────────
-app.route('/api/auth', authRoutes);
+// ── Rutas ─────────────────────────────────────────────────────
+app.route('/api/auth',          authRoutes);
 app.route('/api/profesiograma', profesiogramaRoutes);
-app.route('/api/empresas', empresasRoutes);
+app.route('/api/empresas',      empresasRoutes);
+app.route('/api/historial',     historialRoutes);
+app.route('/api/users',         usersRoutes);
+app.route('/api/ordenes',       ordenesRoutes);
+app.route('/api/pdf',           pdfRoutes);
 
-// ─── 404 ─────────────────────────────────────────────────────
-app.notFound((c) => c.json({ error: 'Ruta no encontrada' }, 404));
+// ── Fallbacks ─────────────────────────────────────────────────
+app.notFound(c  => c.json({ success: false, error: 'Ruta no encontrada' }, 404));
 app.onError((err, c) => {
   console.error(err);
-  return c.json({ error: 'Error interno del servidor' }, 500);
+  return c.json({ success: false, error: 'Error interno del servidor' }, 500);
 });
 
 export default app;
