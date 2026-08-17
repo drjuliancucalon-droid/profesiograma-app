@@ -2,10 +2,12 @@ import type { Context, Next } from 'hono';
 import { verifyJwt } from '../lib/jwt';
 import type { Env } from '../types/env';
 
+type Role = 'admin' | 'medico' | 'rrhh' | 'sst';
+
 type UserPayload = {
   sub: string;
   email: string;
-  rol: 'admin' | 'medico' | 'rrhh';
+  rol: Role;
   iat: number;
   exp: number;
 };
@@ -21,7 +23,7 @@ export async function requireAuth(c: Context<{ Bindings: Env }>, next: Next): Pr
   await next();
 }
 
-export function requireRole(...roles: Array<'admin' | 'medico' | 'rrhh'>) {
+export function requireRole(...roles: Role[]) {
   return async (c: Context<{ Bindings: Env }>, next: Next): Promise<Response | void> => {
     const user = c.get('user') as UserPayload | undefined;
     if (!user || !roles.includes(user.rol)) {
@@ -32,7 +34,7 @@ export function requireRole(...roles: Array<'admin' | 'medico' | 'rrhh'>) {
 }
 
 // Alias para compatibilidad con rutas que usen authMiddleware
-export const authMiddleware = (roles?: Array<'admin' | 'medico' | 'rrhh' | 'sst'>) => {
+export const authMiddleware = (roles?: Role[]) => {
   return async (c: Context<{ Bindings: Env }>, next: Next): Promise<Response | void> => {
     const header = c.req.header('Authorization');
     if (!header?.startsWith('Bearer ')) {
@@ -42,8 +44,8 @@ export const authMiddleware = (roles?: Array<'admin' | 'medico' | 'rrhh' | 'sst'
     if (!payload) return c.json({ success: false, error: 'Token inválido o expirado' }, 401);
     c.set('user', payload as unknown as UserPayload);
     if (roles && roles.length > 0) {
-      const userRol = (payload as Record<string, unknown>).rol as string;
-      if (!roles.includes(userRol as 'admin' | 'medico' | 'rrhh' | 'sst')) {
+      const userRol = (payload as Record<string, unknown>).rol as Role;
+      if (!roles.includes(userRol)) {
         return c.json({ success: false, error: 'Sin permisos suficientes' }, 403);
       }
     }

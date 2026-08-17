@@ -66,8 +66,10 @@ export async function generateProfesiogramaPdf(
   const b = await puppeteer.launch(browser);
   const page = await b.newPage();
   await page.setContent(buildHtml(data), { waitUntil: 'networkidle0' });
-  const pdf = await page.pdf({ format: 'A4', landscape: true, printBackground: true });
+  const pdfData = await page.pdf({ format: 'A4', landscape: true, printBackground: true });
   await page.close();
   await b.close();
-  return pdf.buffer as ArrayBuffer;
+  // Uint8Array → ArrayBuffer propio (evita byteOffset != 0 en buffers compartidos)
+  const arr = pdfData as unknown as Uint8Array;
+  return arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength) as ArrayBuffer;
 }

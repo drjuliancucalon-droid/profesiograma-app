@@ -14,7 +14,7 @@ declare module 'hono' {
     user: {
       sub: string;
       email: string;
-      rol: 'admin' | 'medico' | 'rrhh';
+      rol: 'admin' | 'medico' | 'rrhh' | 'sst';
       iat: number;
       exp: number;
     };
