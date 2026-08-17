@@ -32,7 +32,7 @@ export function ProfesiogramaGeneratorPage() {
     const results: CargoProfesiograma[] = [];
 
     for (const job of jobsList) {
-      const existing = generatedData.find(d => d.cargo === job);
+      const existing = generatedData.find(d => d.cargo === job && d.grupo_ocupacional !== 'Revisión Manual');
       if (existing) { results.push(existing); continue; }
       const res = await api.post<{ success: boolean; data?: CargoProfesiograma; error?: string }>('/profesiograma/generate', { cargo: job });
       if (res.success && res.data) {

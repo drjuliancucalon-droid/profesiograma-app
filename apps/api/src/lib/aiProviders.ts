@@ -27,7 +27,7 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3)
 
 async function callGemini(apiKey: string, systemPrompt: string, userPrompt: string): Promise<string> {
   const resp = await fetchWithRetry(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
