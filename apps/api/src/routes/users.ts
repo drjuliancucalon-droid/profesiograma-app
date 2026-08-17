@@ -1,51 +1,60 @@
 import { Hono } from 'hono';
-import { z } from 'zod';
-import { hashPassword } from '../lib/password';
-import { newId, nowIso } from '../lib/id';
-import { requireAuth, requireRole } from '../middleware/auth';
-import { audit } from '../lib/audit';
 import type { Env } from '../types/env';
+import { requireAuth, requireRole } from '../middleware/auth';
+import { hashPassword } from '../lib/password';
 
-const app = new Hono<{ Bindings: Env }>();
+const users = new Hono<{ Bindings: Env }>();
 
-const schema = z.object({
-  email: z.string().email(),
-  nombre: z.string().min(2),
-  password: z.string().min(8),
-  rol: z.enum(['admin', 'medico', 'rrhh']),
+users.use('*', requireAuth);
+
+// GET /api/users
+users.get('/', requireRole('admin'), async (c) => {
+  const { results } = await c.env.DB
+    .prepare('SELECT id, email, full_name, rol, activo, creado_en FROM users ORDER BY full_name')
+    .all();
+  return c.json({ success: true, data: results });
 });
 
-app.post('/', requireAuth, requireRole('admin'), async c => {
-  const body = schema.parse(await c.req.json());
-  const pw = await hashPassword(body.password);
-  const id = newId();
-  const now = nowIso();
-  await c.env.DB.prepare(
-    `INSERT INTO users (id, email, nombre, password_hash, password_salt, password_iterations, rol, creado_en, actualizado_en)
-     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?8)`
-  ).bind(id, body.email, body.nombre, pw.hash, pw.salt, pw.iterations, body.rol, now).run();
-  const actor = c.get('user') as any;
-  await audit(c.env, { userId: actor.sub, action: 'user.create', entityType: 'user', entityId: id });
-  return c.json({ success: true, data: { id, email: body.email, nombre: body.nombre, rol: body.rol } }, 201);
+// POST /api/users
+users.post('/', requireRole('admin'), async (c) => {
+  const body = await c.req.json<{
+    email: string;
+    password: string;
+    full_name: string;
+    rol: 'admin' | 'medico' | 'rrhh';
+  }>();
+  if (!body.email || !body.password || !body.full_name || !body.rol) {
+    return c.json({ success: false, error: 'Todos los campos son requeridos' }, 400);
+  }
+  const exists = await c.env.DB
+    .prepare('SELECT id FROM users WHERE email = ? LIMIT 1')
+    .bind(body.email).first();
+  if (exists) return c.json({ success: false, error: 'El email ya existe' }, 409);
+
+  const { hash, salt, iterations } = await hashPassword(body.password);
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await c.env.DB.prepare(`
+    INSERT INTO users (id, email, full_name, rol, password_hash, salt, iterations, activo, creado_en, actualizado_en)
+    VALUES (?,?,?,?,?,?,?,1,?,?)
+  `).bind(id, body.email, body.full_name, body.rol, hash, salt, iterations, now, now).run();
+  return c.json({ success: true, id }, 201);
 });
 
-app.get('/', requireAuth, requireRole('admin'), async c => {
-  const rows = await c.env.DB.prepare(
-    `SELECT id, email, nombre, rol, activo, creado_en FROM users ORDER BY creado_en DESC`
-  ).all();
-  return c.json({ success: true, data: rows.results });
+// PATCH /api/users/:id/toggle
+users.patch('/:id/toggle', requireRole('admin'), async (c) => {
+  const id = c.req.param('id');
+  const user = await c.env.DB.prepare('SELECT activo FROM users WHERE id = ? LIMIT 1').bind(id).first<{ activo: number }>();
+  if (!user) return c.json({ success: false, error: 'Usuario no encontrado' }, 404);
+  await c.env.DB.prepare('UPDATE users SET activo = ?, actualizado_en = ? WHERE id = ?')
+    .bind(user.activo ? 0 : 1, new Date().toISOString(), id).run();
+  return c.json({ success: true });
 });
 
-app.patch('/:id/toggle', requireAuth, requireRole('admin'), async c => {
-  const { id } = c.req.param();
-  const row = await c.env.DB.prepare(`SELECT activo FROM users WHERE id=?1`).bind(id).first<{ activo: number }>();
-  if (!row) return c.json({ success: false, error: 'No encontrado' }, 404);
-  const nuevoEstado = row.activo === 1 ? 0 : 1;
-  await c.env.DB.prepare(`UPDATE users SET activo=?1, actualizado_en=?2 WHERE id=?3`)
-    .bind(nuevoEstado, nowIso(), id).run();
-  const actor = c.get('user') as any;
-  await audit(c.env, { userId: actor.sub, action: nuevoEstado ? 'user.activate' : 'user.deactivate', entityType: 'user', entityId: id });
-  return c.json({ success: true, data: { id, activo: nuevoEstado } });
+// DELETE /api/users/:id
+users.delete('/:id', requireRole('admin'), async (c) => {
+  await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(c.req.param('id')).run();
+  return c.json({ success: true });
 });
 
-export default app;
+export default users;

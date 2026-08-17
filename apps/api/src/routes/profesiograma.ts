@@ -1,19 +1,19 @@
 import { Hono } from 'hono';
+import type { Env } from '../types/env';
 import { authMiddleware } from '../middleware/auth';
-import { createProfesiograma, createCargo, saveMatrizExamenes, saveProfesiogramaSnapshot, getProfesiogramasByEmpresa } from '../db/queries';
 
-type Env = { DB: D1Database; JWT_SECRET: string; GEMINI_API_KEY: string };
-const profesiograma = new Hono<{ Bindings: Env; Variables: { user: any; jwtPayload: any } }>();
+type HonoEnv = { Bindings: Env; Variables: { user: { sub: string; email: string; rol: string } } };
+const profesiograma = new Hono<HonoEnv>();
 
 const SYSTEM_PROMPT = `ACTÚA COMO MÉDICO ESPECIALISTA EN MEDICINA DEL TRABAJO Y SST EN COLOMBIA CON 15 AÑOS DE EXPERIENCIA.
-TU OBJETIVO: Estructurar la matriz de evaluaciones médicas de un Profesiograma con rigor técnico absoluto y fundamentación por momento.
+TU OBJETIVO: Estructurar la matriz de evaluaciones médicas de un Profesiograma con rigor técnico.
 
 ESTRUCTURA JSON ESTRICTA:
 {
   "grupoocupacional": "Categoría general",
   "cargo": "Nombre del cargo",
-  "perfilcargo": { "descripcion": "...", "competencias": "...", "requisitosfisicos": "..." },
-  "peligrosriesgos": "Detalle técnico de exposición",
+  "perfilcargo": { "descripcion": "", "competencias": "", "requisitosfisicos": "" },
+  "peligrosriesgos": "",
   "matriz": {
     "fisico": {"I":true,"P":true,"R":true,"PI":true,"RL":true},
     "osteomuscular": {"I":true,"P":true,"R":true,"PI":true,"RL":true},
@@ -26,11 +26,7 @@ ESTRUCTURA JSON ESTRICTA:
     "laboratorio": ""
   },
   "matrizobservaciones": {},
-  "fundamentaciontecnica": {
-    "porquemomentos": "...",
-    "obligatorios": [],
-    "electivos": []
-  },
+  "fundamentaciontecnica": { "porquemomentos": "", "obligatorios": [], "electivos": [] },
   "recomendacionesrestricciones": []
 }`;
 
@@ -50,82 +46,106 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3)
   throw new Error('Max retries reached');
 }
 
-// POST /api/profesiograma/generate — genera IA para un cargo
+// POST /api/profesiograma/generate
 profesiograma.post('/generate', authMiddleware(['admin', 'medico', 'sst']), async (c) => {
-  const { cargo, profesiograma_id } = await c.req.json();
-  if (!cargo) return c.json({ error: 'El campo cargo es requerido' }, 400);
+  const { cargo } = await c.req.json<{ cargo?: string; profesiograma_id?: string }>();
+  if (!cargo) return c.json({ success: false, error: 'El campo cargo es requerido' }, 400);
   try {
-    const response = await fetchWithRetry(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-25:generateContent?key=${c.env.GEMINI_API_KEY}`,
+    const resp = await fetchWithRetry(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${c.env.GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: `Analiza este cargo: ${cargo}. Escríbelo exactamente igual en el JSON devuelto.` }] }],
+          contents: [{ parts: [{ text: `Analiza este cargo: ${cargo}` }] }],
           systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          generationConfig: { responseMimeType: 'application/json' }
-        })
+          generationConfig: { responseMimeType: 'application/json' },
+        }),
       }
     );
-    const data = await response.json() as any;
-    if (!data.candidates?.[0]?.content) throw new Error('IA no devolvió respuesta válida');
-    let jsonText = data.candidates[0].content.parts[0].text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const parsed = JSON.parse(jsonText);
-    return c.json({ success: true, data: parsed, raw: jsonText });
-  } catch (err: any) {
-    return c.json({ error: err.message ?? 'Error del motor IA' }, 500);
+    const data = await resp.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error('IA no devolvió respuesta válida');
+    const parsed: unknown = JSON.parse(text.replace(/```json/g, '').replace(/```/g, '').trim());
+    return c.json({ success: true, data: parsed });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Error del motor IA';
+    return c.json({ success: false, error: msg }, 500);
   }
 });
 
-// POST /api/profesiograma — crea profesiograma completo en D1
+// POST /api/profesiograma
 profesiograma.post('/', authMiddleware(['admin', 'medico']), async (c) => {
-  const user = c.get('user') as any;
-  const body = await c.req.json();
+  const user = c.get('user');
+  const body = await c.req.json<{
+    empresa_id?: string;
+    profesional_id?: string;
+    fecha_emision?: string;
+    observaciones?: string;
+    cargos_data?: Array<Record<string, unknown>>;
+  }>();
   const { empresa_id, profesional_id, cargos_data } = body;
   if (!empresa_id || !profesional_id || !cargos_data?.length) {
-    return c.json({ error: 'Faltan campos requeridos' }, 400);
+    return c.json({ success: false, error: 'Faltan campos requeridos: empresa_id, profesional_id, cargos_data' }, 400);
   }
   try {
-    const prof = await createProfesiograma(c.env.DB, { empresa_id, profesional_id, created_by: user.id }) as any;
-    const savedCargos = [];
+    const profId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await c.env.DB.prepare(`
+      INSERT INTO profesiogramas (id, empresa_id, profesional_id, fecha_emision, version, estado, observaciones, creado_por, creado_en, actualizado_en)
+      VALUES (?,?,?,?,1,'borrador',?,?,?,?)
+    `).bind(profId, empresa_id, profesional_id, body.fecha_emision ?? now.slice(0,10), body.observaciones ?? null, user.sub, now, now).run();
+
     for (const cd of cargos_data) {
-      const cargo = await createCargo(c.env.DB, {
-        profesiograma_id: prof.id,
-        grupo_ocupacional: cd.grupoocupacional ?? 'General',
-        nombre_cargo: cd.cargo,
-        descripcion: cd.perfilcargo?.descripcion,
-        competencias: cd.perfilcargo?.competencias,
-        requisitos_fisicos: cd.perfilcargo?.requisitosfisicos,
-        peligros_riesgos: cd.peligrosriesgos,
-        ia_raw_json: JSON.stringify(cd)
-      }) as any;
-      const examenes = Object.entries(cd.matriz ?? {}).map(([examen, momentos]: [string, any]) => ({
-        examen,
-        momento_i: !!momentos.I, momento_p: !!momentos.P, momento_r: !!momentos.R,
-        momento_pi: !!momentos.PI, momento_rl: !!momentos.RL,
-        observacion: cd.matrizobservaciones?.[examen],
-        obligatorio: cd.fundamentaciontecnica?.obligatorios?.includes(examen) ?? false
-      }));
-      await saveMatrizExamenes(c.env.DB, cargo.id, examenes);
-      savedCargos.push(cargo);
+      const cargoId = crypto.randomUUID();
+      await c.env.DB.prepare(`
+        INSERT INTO cargos (id, profesiograma_id, grupo_ocupacional, cargo, perfil_descripcion, perfil_competencias, perfil_requisitos_fisicos, peligros_riesgos, matriz_json, ia_raw_json, creado_en, actualizado_en)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+      `).bind(
+        cargoId, profId,
+        cd.grupoocupacional ?? 'General',
+        cd.cargo ?? '',
+        (cd.perfilcargo as Record<string,unknown>)?.descripcion ?? null,
+        (cd.perfilcargo as Record<string,unknown>)?.competencias ?? null,
+        (cd.perfilcargo as Record<string,unknown>)?.requisitosfisicos ?? null,
+        cd.peligrosriesgos ?? null,
+        JSON.stringify(cd.matriz ?? {}),
+        JSON.stringify(cd),
+        now, now
+      ).run();
     }
-    await saveProfesiogramaSnapshot(c.env.DB, {
-      profesiograma_id: prof.id, version: 1,
-      snapshot_json: JSON.stringify(body),
-      changed_by: user.id, cambio_desc: 'Creación inicial'
-    });
-    return c.json({ success: true, profesiograma: prof, cargos: savedCargos }, 201);
-  } catch (err: any) {
-    return c.json({ error: err.message }, 500);
+
+    await c.env.DB.prepare(`
+      INSERT INTO historial_versiones (id, profesiograma_id, version, snapshot_json, cambio_desc, creado_por, creado_en)
+      VALUES (?,?,1,?,'Creación inicial',?,?)
+    `).bind(crypto.randomUUID(), profId, JSON.stringify(body), user.sub, now).run();
+
+    return c.json({ success: true, id: profId }, 201);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Error interno';
+    return c.json({ success: false, error: msg }, 500);
   }
 });
 
-// GET /api/profesiograma?empresa_id=xxx
+// GET /api/profesiograma
 profesiograma.get('/', authMiddleware(), async (c) => {
   const empresaId = c.req.query('empresa_id');
-  if (!empresaId) return c.json({ error: 'empresa_id requerido' }, 400);
-  const data = await getProfesiogramasByEmpresa(c.env.DB, empresaId);
-  return c.json(data);
+  if (!empresaId) return c.json({ success: false, error: 'empresa_id requerido' }, 400);
+  const { results } = await c.env.DB
+    .prepare('SELECT * FROM profesiogramas WHERE empresa_id = ? ORDER BY creado_en DESC')
+    .bind(empresaId).all();
+  return c.json({ success: true, data: results });
+});
+
+// GET /api/profesiograma/:id
+profesiograma.get('/:id', authMiddleware(), async (c) => {
+  const id = c.req.param('id');
+  const row = await c.env.DB.prepare('SELECT * FROM profesiogramas WHERE id = ? LIMIT 1').bind(id).first();
+  if (!row) return c.json({ success: false, error: 'No encontrado' }, 404);
+  const { results: cargos } = await c.env.DB
+    .prepare('SELECT * FROM cargos WHERE profesiograma_id = ? ORDER BY orden_index')
+    .bind(id).all();
+  return c.json({ success: true, data: { ...row, cargos } });
 });
 
 export default profesiograma;

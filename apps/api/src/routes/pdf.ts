@@ -1,47 +1,92 @@
 import { Hono } from 'hono';
-import { requireAuth } from '../middleware/auth';
-import { renderProfesiogramaPdf } from '../services/pdf.service';
-import { audit } from '../lib/audit';
 import type { Env } from '../types/env';
+import { requireAuth } from '../middleware/auth';
+import { generateProfesiogramaPdf } from '../services/pdf.service';
 
-const app = new Hono<{ Bindings: Env }>();
+const pdf = new Hono<{ Bindings: Env }>();
 
-app.get('/profesiogramas/:id/pdf', requireAuth, async c => {
-  const { id } = c.req.param();
-  const actor = c.get('user') as any;
+pdf.use('*', requireAuth);
 
-  const base = await c.env.DB.prepare(`
-    SELECT p.id, p.fecha_emision, p.version,
-           e.nombre as empresa_nombre, e.nit, e.responsable_sg_sst,
-           pr.nombre as profesional_nombre, pr.licencia as profesional_licencia
-    FROM profesiogramas p
-    JOIN empresas e ON e.id = p.empresa_id
-    LEFT JOIN profesionales pr ON pr.id = p.profesional_id
-    WHERE p.id = ?1 LIMIT 1
-  `).bind(id).first<any>();
+// GET /api/pdf/profesiogramas/:id/pdf
+pdf.get('/profesiogramas/:id/pdf', async (c) => {
+  const id = c.req.param('id');
 
-  if (!base) return c.json({ success: false, error: 'Profesiograma no encontrado' }, 404);
+  // Obtener profesiograma + cargos
+  const prof = await c.env.DB
+    .prepare('SELECT * FROM profesiogramas WHERE id = ? LIMIT 1')
+    .bind(id).first<Record<string, unknown>>();
+  if (!prof) return c.json({ success: false, error: 'Profesiograma no encontrado' }, 404);
 
-  const { results: cargos } = await c.env.DB.prepare(`
-    SELECT grupo_ocupacional, cargo, perfil_descripcion, peligros_riesgos,
-           matriz_json, recomendaciones_json
-    FROM cargos WHERE profesiograma_id = ?1
-    ORDER BY orden_index ASC, creado_en ASC
-  `).bind(id).all<any>();
+  const empresa = await c.env.DB
+    .prepare('SELECT * FROM empresas WHERE id = ? LIMIT 1')
+    .bind(prof.empresa_id as string).first<Record<string, unknown>>();
 
-  const pdfBytes = await renderProfesiogramaPdf(c.env, { ...base, cargos });
+  const { results: cargos } = await c.env.DB
+    .prepare('SELECT * FROM cargos WHERE profesiograma_id = ? ORDER BY orden_index')
+    .bind(id).all<Record<string, unknown>>();
 
-  await audit(c.env, {
-    userId: actor.sub, action: 'pdf.export', entityType: 'profesiograma', entityId: id
-  });
+  try {
+    const pdfBytes = await generateProfesiogramaPdf(c.env.BROWSER, {
+      profesiograma: prof,
+      empresa: empresa ?? {},
+      cargos,
+    });
 
-  const slug = (base.empresa_nombre as string).toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 30);
-  return new Response(pdfBytes, {
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="profesiograma-${slug}-v${base.version}.pdf"`,
-    },
-  });
+    return new Response(pdfBytes, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="profesiograma-${id}.pdf"`,
+        'Content-Length': String(pdfBytes.byteLength),
+      },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Error generando PDF';
+    return c.json({ success: false, error: msg }, 500);
+  }
 });
 
-export default app;
+// GET /api/pdf/ordenes/:id/pdf
+pdf.get('/ordenes/:id/pdf', async (c) => {
+  const id = c.req.param('id');
+  const orden = await c.env.DB
+    .prepare('SELECT * FROM ordenes_servicio WHERE id = ? LIMIT 1')
+    .bind(id).first<Record<string, unknown>>();
+  if (!orden) return c.json({ success: false, error: 'Orden no encontrada' }, 404);
+
+  const empresa = await c.env.DB
+    .prepare('SELECT * FROM empresas WHERE id = ? LIMIT 1')
+    .bind(orden.empresa_id as string).first<Record<string, unknown>>();
+
+  // HTML minimo para la orden
+  const html = `<!DOCTYPE html><html><body style="font-family:Arial;padding:2rem">
+    <h1>Orden de Servicio</h1>
+    <p><b>Candidato:</b> ${orden.candidato_nombre ?? 'N/A'}</p>
+    <p><b>Documento:</b> ${orden.candidato_documento ?? 'N/A'}</p>
+    <p><b>Momento:</b> ${orden.momento}</p>
+    <p><b>Empresa:</b> ${(empresa?.nombre as string) ?? 'N/A'}</p>
+    <p><b>Estado:</b> ${orden.estado}</p>
+  </body></html>`;
+
+  try {
+    const browser = await (c.env.BROWSER as unknown as { launch: () => Promise<{ newPage: () => Promise<{
+      setContent: (h: string, o: object) => Promise<void>;
+      pdf: (o: object) => Promise<Uint8Array>;
+      close: () => Promise<void>;
+    }> }> }).launch();
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    const pdfBytes = await page.pdf({ format: 'A4' });
+    await page.close();
+    return new Response(pdfBytes, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="orden-${id}.pdf"`,
+      },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Error generando PDF';
+    return c.json({ success: false, error: msg }, 500);
+  }
+});
+
+export default pdf;

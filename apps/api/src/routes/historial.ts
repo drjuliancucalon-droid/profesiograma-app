@@ -1,17 +1,26 @@
-// ==============================================================
-// RUTA HISTORIAL — Versiones de profesiograma
-// GET /api/historial/:profesiogramaId
-// ==============================================================
-
 import { Hono } from 'hono';
-import { requireAuth, type Env, type Variables } from '../middleware/auth';
-import { historialQueries } from '../db/queries';
+import type { Env } from '../types/env';
+import { requireAuth } from '../middleware/auth';
 
-const historial = new Hono<{ Bindings: Env; Variables: Variables }>();
+const historial = new Hono<{ Bindings: Env }>();
 
-historial.get('/:profesiogramaId', requireAuth, async (c) => {
-  const result = await historialQueries.findByProfesiograma(c.env.DB, c.req.param('profesiogramaId'));
-  return c.json({ success: true, data: result.results ?? [] });
+historial.use('*', requireAuth);
+
+historial.get('/', async (c) => {
+  const profesiogramaId = c.req.query('profesiograma_id');
+  if (!profesiogramaId) return c.json({ success: false, error: 'profesiograma_id requerido' }, 400);
+  const { results } = await c.env.DB
+    .prepare('SELECT * FROM historial_versiones WHERE profesiograma_id = ? ORDER BY version DESC')
+    .bind(profesiogramaId).all();
+  return c.json({ success: true, data: results });
+});
+
+historial.get('/:id', async (c) => {
+  const row = await c.env.DB
+    .prepare('SELECT * FROM historial_versiones WHERE id = ? LIMIT 1')
+    .bind(c.req.param('id')).first();
+  if (!row) return c.json({ success: false, error: 'No encontrado' }, 404);
+  return c.json({ success: true, data: row });
 });
 
 export default historial;
