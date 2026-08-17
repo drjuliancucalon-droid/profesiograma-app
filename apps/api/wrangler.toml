@@ -15,17 +15,19 @@ CORS_ORIGIN  = "https://profesiograma.pages.dev"
 [[d1_databases]]
 binding       = "DB"
 database_name = "profesiograma-db"
-database_id   = "REPLACE_WITH_YOUR_D1_ID"
+database_id   = "84bc8379-5f0d-462a-8585-76a52be489ad"
 migrations_dir = "migrations"
 
 # ── Browser Rendering (Puppeteer PDF) ────────────────────────
 [browser]
 binding = "BROWSER"
 
-# ── R2 (assets opcionales) ───────────────────────────────────
-[[r2_buckets]]
-binding     = "ASSETS"
-bucket_name = "profesiograma-assets"
+# ── R2 (assets opcionales) — deshabilitado: binding declarado en types/env.ts
+# pero no se usa en ninguna ruta todavía, y R2 requiere habilitarse primero
+# en el dashboard de Cloudflare. Descomentar cuando se use.
+# [[r2_buckets]]
+# binding     = "ASSETS"
+# bucket_name = "profesiograma-assets"
 
 # ── Rutas ────────────────────────────────────────────────────
 # Descomenta y reemplaza con tu dominio real si usas Custom Domain:
