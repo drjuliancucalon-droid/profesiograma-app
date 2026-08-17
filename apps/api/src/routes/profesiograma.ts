@@ -5,6 +5,7 @@ import { generateWithFallback } from '../lib/aiProviders';
 import { getAiKeys, getPrimaryProvider, providerOrder } from '../lib/settings';
 import { parseBody } from '../lib/validate';
 import { profesiogramaGenerateSchema, profesiogramaCreateSchema } from '../lib/schemas';
+import { auditLog } from '../lib/audit';
 
 const profesiograma = new Hono<HonoEnv>();
 
@@ -140,6 +141,11 @@ profesiograma.post(
         (id, profesiograma_id, version, snapshot_json, cambiado_por, cambio_desc, creado_en)
         VALUES (?,?,1,?,?,'Creación inicial',?)
       `).bind(crypto.randomUUID(), profId, JSON.stringify(body), user.sub, now).run();
+
+      auditLog(c, {
+        action: 'profesiograma.create', entityType: 'profesiograma', entityId: profId, userId: user.sub,
+        metadata: { empresa_id, profesional_id },
+      });
 
       return c.json({ success: true, id: profId, cargos }, 201);
     } catch (err) {

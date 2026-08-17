@@ -4,6 +4,7 @@ import { requireAuth, requireRole } from '../middleware/auth';
 import { encrypt, decrypt } from '../lib/crypto';
 import { parseBody } from '../lib/validate';
 import { aiKeysSchema } from '../lib/schemas';
+import { auditLog } from '../lib/audit';
 
 const settings = new Hono<HonoEnv>();
 
@@ -67,6 +68,12 @@ settings.put('/ai-keys', async (c) => {
   if (body.openrouter_api_key) await upsert('openrouter_api_key', await encrypt(body.openrouter_api_key, c.env.ENCRYPTION_KEY));
   if (body.mistral_api_key) await upsert('mistral_api_key', await encrypt(body.mistral_api_key, c.env.ENCRYPTION_KEY));
   if (body.primary_provider) await upsert('ai_primary_provider', body.primary_provider);
+
+  const changedFields = Object.keys(body).filter((k) => body[k as keyof typeof body] !== undefined);
+  auditLog(c, {
+    action: 'settings.ai_keys.update', entityType: 'settings', userId: user.sub,
+    metadata: { changed_fields: changedFields },
+  });
 
   return c.json({ success: true });
 });

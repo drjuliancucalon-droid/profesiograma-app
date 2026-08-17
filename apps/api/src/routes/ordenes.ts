@@ -3,6 +3,7 @@ import type { HonoEnv } from '../types/env';
 import { requireAuth } from '../middleware/auth';
 import { parseBody } from '../lib/validate';
 import { ordenSchema } from '../lib/schemas';
+import { auditLog } from '../lib/audit';
 
 const ordenes = new Hono<HonoEnv>();
 
@@ -71,6 +72,10 @@ ordenes.post('/', async (c) => {
     JSON.stringify(body.examenes_json ?? []),
     user.sub, now
   ).run();
+  auditLog(c, {
+    action: 'orden.create', entityType: 'orden', entityId: id, userId: user.sub,
+    metadata: { tipo_momento: body.tipo_momento, empresa_id: body.empresa_id, cargo_id: body.cargo_id },
+  });
   return c.json({ success: true, id }, 201);
 });
 

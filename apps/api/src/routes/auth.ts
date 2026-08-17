@@ -5,6 +5,7 @@ import { hashPassword, verifyPassword } from '../lib/password';
 import { newId, nowIso } from '../lib/id';
 import { parseBody } from '../lib/validate';
 import { loginSchema, refreshSchema, logoutSchema } from '../lib/schemas';
+import { auditLog } from '../lib/audit';
 
 const auth = new Hono<HonoEnv>();
 
@@ -22,14 +23,20 @@ auth.post('/login', async (c) => {
       password_hash: string; password_salt: string; password_iterations: number;
     }>();
 
-  if (!user) return c.json({ success: false, error: 'Credenciales inválidas' }, 401);
+  if (!user) {
+    auditLog(c, { action: 'auth.login.failed', entityType: 'user', metadata: { email } });
+    return c.json({ success: false, error: 'Credenciales inválidas' }, 401);
+  }
 
   const valid = await verifyPassword(password, {
     hash: user.password_hash,
     salt: user.password_salt,
     iterations: user.password_iterations,
   });
-  if (!valid) return c.json({ success: false, error: 'Credenciales inválidas' }, 401);
+  if (!valid) {
+    auditLog(c, { action: 'auth.login.failed', entityType: 'user', entityId: user.id, metadata: { email } });
+    return c.json({ success: false, error: 'Credenciales inválidas' }, 401);
+  }
 
   const accessToken = await signJwt(c.env.JWT_SECRET, {
     sub: user.id, email: user.email, rol: user.rol,
@@ -42,6 +49,8 @@ auth.post('/login', async (c) => {
     .prepare('INSERT INTO sessions (id, user_id, refresh_token, expires_at, creado_en) VALUES (?,?,?,?,?)')
     .bind(newId(), user.id, refreshToken, expiresAt, nowIso())
     .run();
+
+  auditLog(c, { action: 'auth.login.success', entityType: 'user', entityId: user.id, userId: user.id });
 
   return c.json({
     success: true,
@@ -96,7 +105,13 @@ auth.post('/logout', async (c) => {
   const parsed = await parseBody(c, logoutSchema);
   if (!parsed.ok) return parsed.response;
   if (parsed.data.refresh_token) {
-    await c.env.DB.prepare('UPDATE sessions SET revoked = 1 WHERE refresh_token = ?').bind(parsed.data.refresh_token).run();
+    const revoked = await c.env.DB
+      .prepare('UPDATE sessions SET revoked = 1 WHERE refresh_token = ? RETURNING user_id')
+      .bind(parsed.data.refresh_token)
+      .first<{ user_id: string }>();
+    if (revoked) {
+      auditLog(c, { action: 'auth.logout', entityType: 'user', entityId: revoked.user_id, userId: revoked.user_id });
+    }
   }
   return c.json({ success: true, message: 'Sesión cerrada' });
 });

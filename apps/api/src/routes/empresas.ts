@@ -3,6 +3,7 @@ import type { HonoEnv } from '../types/env';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { parseBody } from '../lib/validate';
 import { empresaSchema } from '../lib/schemas';
+import { auditLog } from '../lib/audit';
 
 const empresas = new Hono<HonoEnv>();
 
@@ -34,6 +35,10 @@ empresas.post('/', requireRole('admin', 'medico'), async (c) => {
     id, body.nombre, body.nit ?? null, body.responsable ?? null,
     body.logo_url ?? null, now, now
   ).run();
+  auditLog(c, {
+    action: 'empresa.create', entityType: 'empresa', entityId: id, userId: c.get('user').sub,
+    metadata: { nombre: body.nombre },
+  });
   return c.json({ success: true, id }, 201);
 });
 
@@ -41,13 +46,18 @@ empresas.put('/:id', requireRole('admin'), async (c) => {
   const parsed = await parseBody(c, empresaSchema);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
+  const id = c.req.param('id');
   const now = new Date().toISOString();
   await c.env.DB.prepare(`
     UPDATE empresas SET nombre=?,nit=?,responsable=?,logo_url=?,actualizado_en=? WHERE id=?
   `).bind(
     body.nombre, body.nit ?? null, body.responsable ?? null,
-    body.logo_url ?? null, now, c.req.param('id')
+    body.logo_url ?? null, now, id
   ).run();
+  auditLog(c, {
+    action: 'empresa.update', entityType: 'empresa', entityId: id, userId: c.get('user').sub,
+    metadata: { nombre: body.nombre },
+  });
   return c.json({ success: true });
 });
 

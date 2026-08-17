@@ -3,6 +3,7 @@ import type { HonoEnv } from '../types/env';
 import { requireAuth } from '../middleware/auth';
 import { parseBody } from '../lib/validate';
 import { profesionalSchema } from '../lib/schemas';
+import { auditLog } from '../lib/audit';
 
 const profesionales = new Hono<HonoEnv>();
 
@@ -38,6 +39,10 @@ profesionales.post('/', async (c) => {
     id, body.nombre, cedula, body.titulo ?? '', body.licencia ?? '',
     body.celular ?? null, body.correo ?? null, body.firma_url ?? null, now
   ).run();
+  auditLog(c, {
+    action: 'profesional.create', entityType: 'profesional', entityId: id, userId: c.get('user').sub,
+    metadata: { nombre: body.nombre },
+  });
   return c.json({ success: true, id }, 201);
 });
 

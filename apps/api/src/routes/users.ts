@@ -4,6 +4,7 @@ import { requireAuth, requireRole } from '../middleware/auth';
 import { hashPassword } from '../lib/password';
 import { parseBody } from '../lib/validate';
 import { createUserSchema } from '../lib/schemas';
+import { auditLog } from '../lib/audit';
 
 const users = new Hono<HonoEnv>();
 
@@ -34,6 +35,10 @@ users.post('/', requireRole('admin'), async (c) => {
     INSERT INTO users (id, email, nombre, rol, password_hash, password_salt, password_iterations, activo, creado_en, actualizado_en)
     VALUES (?,?,?,?,?,?,?,1,?,?)
   `).bind(id, body.email, body.nombre, body.rol, hash, salt, iterations, now, now).run();
+  auditLog(c, {
+    action: 'user.create', entityType: 'user', entityId: id, userId: c.get('user').sub,
+    metadata: { email: body.email, rol: body.rol },
+  });
   return c.json({ success: true, id }, 201);
 });
 
@@ -44,14 +49,21 @@ users.patch('/:id/toggle', requireRole('admin'), async (c) => {
     .prepare('SELECT activo FROM users WHERE id = ? LIMIT 1')
     .bind(id).first<{ activo: number }>();
   if (!user) return c.json({ success: false, error: 'Usuario no encontrado' }, 404);
+  const nuevoEstado = user.activo ? 0 : 1;
   await c.env.DB.prepare('UPDATE users SET activo = ?, actualizado_en = ? WHERE id = ?')
-    .bind(user.activo ? 0 : 1, new Date().toISOString(), id).run();
+    .bind(nuevoEstado, new Date().toISOString(), id).run();
+  auditLog(c, {
+    action: 'user.toggle', entityType: 'user', entityId: id, userId: c.get('user').sub,
+    metadata: { activo: !!nuevoEstado },
+  });
   return c.json({ success: true });
 });
 
 // DELETE /api/users/:id
 users.delete('/:id', requireRole('admin'), async (c) => {
-  await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(c.req.param('id')).run();
+  const id = c.req.param('id');
+  await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
+  auditLog(c, { action: 'user.delete', entityType: 'user', entityId: id, userId: c.get('user').sub });
   return c.json({ success: true });
 });
 
