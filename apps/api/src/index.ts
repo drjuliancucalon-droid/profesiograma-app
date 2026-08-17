@@ -42,6 +42,7 @@ app.use('*', cors({
   credentials: true,
 }));
 app.use('/api/profesiograma/generate', rateLimitMiddleware(10, 60_000));
+app.use('/api/auth/login', rateLimitMiddleware(5, 60_000));
 
 // ── Health ────────────────────────────────────────────────────────
 app.get('/health', (c) =>
