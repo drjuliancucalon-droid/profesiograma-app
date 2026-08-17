@@ -6,6 +6,7 @@ import { EditableDiv } from '../../shared/ui/EditableDiv';
 import { MomentoBadge } from '../../shared/ui/MomentoBadge';
 import { MARCO_LEGAL, DESCRIPCION_PRUEBAS, INSTRUCTIVO_STEPS, EXAMENES_MATRIZ } from '../../shared/data/legal';
 import { guardarProfesiograma } from '../../shared/lib/saveProfesiograma';
+import { downloadFile } from '../../shared/lib/api';
 
 type Section = 'all' | 'presentacion' | 'matriz' | 'recomendaciones' | 'pruebas' | 'legal';
 
@@ -18,10 +19,11 @@ const TABS: { id: Section; label: string }[] = [
 ];
 
 export function InformePage() {
-  const { generatedData, empresaInfo, profesionalInfo, logoStyles, setLogoStyles, updateCargo, toggleMomento, setSavedRecord } = useProfesiogramaStore();
+  const { generatedData, empresaInfo, profesionalInfo, logoStyles, setLogoStyles, updateCargo, toggleMomento, savedRecord, setSavedRecord } = useProfesiogramaStore();
   const [section, setSection] = useState<Section>('all');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
@@ -35,6 +37,21 @@ export function InformePage() {
     } finally {
       setSaving(false);
       setTimeout(() => setSaveMsg(null), 6000);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    setDownloadingPdf(true);
+    setSaveMsg(null);
+    try {
+      const record = savedRecord ?? await guardarProfesiograma(empresaInfo, profesionalInfo, generatedData);
+      if (!savedRecord) setSavedRecord(record);
+      await downloadFile(`/pdf/profesiogramas/${record.profesiogramaId}/pdf`, `Profesiograma-${empresaInfo.nombre || 'documento'}.pdf`);
+    } catch (err) {
+      setSaveMsg({ type: 'error', text: err instanceof Error ? err.message : 'Error al generar el PDF.' });
+      setTimeout(() => setSaveMsg(null), 6000);
+    } finally {
+      setDownloadingPdf(false);
     }
   };
 
@@ -83,11 +100,12 @@ export function InformePage() {
         <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-5 mb-8 flex flex-col sm:flex-row justify-between items-center gap-4 print:hidden">
           <div>
             <h3 className="font-black text-lg text-indigo-300">Preparación de Impresión</h3>
-            <p className="text-sm text-slate-400 mt-1">Haz clic en los textos para editarlos directamente antes de imprimir.</p>
+            <p className="text-sm text-slate-400 mt-1">Haz clic en los textos para editarlos directamente antes de generar el PDF.</p>
           </div>
           <div className="flex gap-3 items-center">
-            <button onClick={() => window.print()} className="bg-slate-950 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 transition-all text-sm">
-              <Printer size={15} /> Imprimir / Guardar PDF
+            <button onClick={handleDownloadPdf} disabled={downloadingPdf} className="bg-slate-950 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 disabled:opacity-60 transition-all text-sm">
+              {downloadingPdf ? <Loader2 size={15} className="animate-spin" /> : <Printer size={15} />}
+              {downloadingPdf ? 'Generando PDF...' : 'Descargar PDF'}
             </button>
           </div>
         </div>

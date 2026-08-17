@@ -20,14 +20,27 @@ pdf.get('/profesiogramas/:id/pdf', async (c) => {
     .prepare('SELECT * FROM empresas WHERE id = ? LIMIT 1')
     .bind(prof.empresa_id as string).first<Record<string, unknown>>();
 
-  const { results: cargos } = await c.env.DB
-    .prepare('SELECT * FROM cargos WHERE profesiograma_id = ? ORDER BY orden_index')
-    .bind(id).all<Record<string, unknown>>();
+  const profesional = prof.profesional_id
+    ? await c.env.DB.prepare('SELECT * FROM profesionales WHERE id = ? LIMIT 1').bind(prof.profesional_id as string).first<Record<string, unknown>>()
+    : null;
+
+  const { results: cargoRows } = await c.env.DB
+    .prepare('SELECT * FROM cargos WHERE profesiograma_id = ? ORDER BY creado_en')
+    .bind(id).all<{ ia_raw_json: string }>();
+
+  const cargos = cargoRows.map((row) => {
+    try {
+      return JSON.parse(row.ia_raw_json) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  });
 
   try {
     const pdfBytes = await generateProfesiogramaPdf(c.env.BROWSER, {
       profesiograma: prof,
       empresa: empresa ?? {},
+      profesional,
       cargos,
     });
     return new Response(pdfBytes, {

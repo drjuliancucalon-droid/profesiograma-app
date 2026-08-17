@@ -4,7 +4,7 @@ import { Printer, ClipboardList, ShieldCheck, Loader2 } from 'lucide-react';
 import { useProfesiogramaStore } from '../../store/profesiogramaStore';
 import { EXAMENES_MATRIZ } from '../../shared/data/legal';
 import { guardarProfesiograma } from '../../shared/lib/saveProfesiograma';
-import { api } from '../../shared/lib/api';
+import { api, downloadFile } from '../../shared/lib/api';
 
 const MOMENTOS = ['I', 'P', 'R', 'PI', 'RL'] as const;
 
@@ -61,9 +61,9 @@ export function OrdenesPage() {
         candidato_id: candidate.id || undefined,
         examenes_json: activeExams,
       });
-      if (!res.success) throw new Error(res.error ?? 'No se pudo guardar la orden');
+      if (!res.success || !res.id) throw new Error(res.error ?? 'No se pudo guardar la orden');
 
-      window.print();
+      await downloadFile(`/pdf/ordenes/${res.id}/pdf`, `Orden-${requestRole || 'servicio'}.pdf`);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Error al guardar la orden.');
     } finally {
@@ -139,7 +139,7 @@ export function OrdenesPage() {
           {errorMsg && <p className="text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-lg p-2">{errorMsg}</p>}
           <button onClick={handleGuardarEImprimir} disabled={!requestRole || !activeExams.length || saving} className="w-full bg-slate-950 border border-slate-700 text-white py-3 rounded-xl font-bold flex justify-center gap-2 hover:bg-slate-800 disabled:opacity-40 transition-all">
             {saving ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
-            {saving ? 'Guardando...' : 'Guardar e Imprimir Orden'}
+            {saving ? 'Generando...' : 'Guardar y Descargar PDF'}
           </button>
         </div>
       </div>
