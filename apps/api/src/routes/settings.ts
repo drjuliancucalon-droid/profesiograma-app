@@ -1,10 +1,21 @@
 import { Hono } from 'hono';
 import type { HonoEnv } from '../types/env';
 import { requireAuth, requireRole } from '../middleware/auth';
+import { encrypt, decrypt } from '../lib/crypto';
 
 const settings = new Hono<HonoEnv>();
 
 settings.use('*', requireAuth, requireRole('admin'));
+
+async function decryptSafe(value: string | undefined, encryptionKey: string): Promise<string | undefined> {
+  if (!value) return undefined;
+  try {
+    return await decrypt(value, encryptionKey);
+  } catch {
+    // Claves guardadas antes de activar el cifrado: se devuelven tal cual.
+    return value;
+  }
+}
 
 function mask(value?: string): string | null {
   if (!value) return null;
@@ -18,19 +29,24 @@ settings.get('/ai-keys', async (c) => {
     .prepare("SELECT key, value FROM settings WHERE key IN ('gemini_api_key','openrouter_api_key','mistral_api_key','ai_primary_provider')")
     .all<{ key: string; value: string }>();
   const stored = Object.fromEntries(results.map((r) => [r.key, r.value]));
+  const [gemini, openrouter, mistral] = await Promise.all([
+    decryptSafe(stored.gemini_api_key, c.env.ENCRYPTION_KEY),
+    decryptSafe(stored.openrouter_api_key, c.env.ENCRYPTION_KEY),
+    decryptSafe(stored.mistral_api_key, c.env.ENCRYPTION_KEY),
+  ]);
   return c.json({
     success: true,
     data: {
-      gemini_api_key: mask(stored.gemini_api_key),
-      openrouter_api_key: mask(stored.openrouter_api_key),
-      mistral_api_key: mask(stored.mistral_api_key),
+      gemini_api_key: mask(gemini),
+      openrouter_api_key: mask(openrouter),
+      mistral_api_key: mask(mistral),
       primary_provider: stored.ai_primary_provider ?? 'gemini',
       gemini_env_fallback: !!c.env.GEMINI_API_KEY,
     },
   });
 });
 
-// PUT /api/settings/ai-keys — actualiza solo los campos enviados (no vacíos)
+// PUT /api/settings/ai-keys — actualiza solo los campos enviados (no vacíos), cifrados
 settings.put('/ai-keys', async (c) => {
   const body = await c.req.json<{
     gemini_api_key?: string;
@@ -48,9 +64,9 @@ settings.put('/ai-keys', async (c) => {
       .run();
   };
 
-  if (body.gemini_api_key) await upsert('gemini_api_key', body.gemini_api_key);
-  if (body.openrouter_api_key) await upsert('openrouter_api_key', body.openrouter_api_key);
-  if (body.mistral_api_key) await upsert('mistral_api_key', body.mistral_api_key);
+  if (body.gemini_api_key) await upsert('gemini_api_key', await encrypt(body.gemini_api_key, c.env.ENCRYPTION_KEY));
+  if (body.openrouter_api_key) await upsert('openrouter_api_key', await encrypt(body.openrouter_api_key, c.env.ENCRYPTION_KEY));
+  if (body.mistral_api_key) await upsert('mistral_api_key', await encrypt(body.mistral_api_key, c.env.ENCRYPTION_KEY));
   if (body.primary_provider) await upsert('ai_primary_provider', body.primary_provider);
 
   return c.json({ success: true });
@@ -59,10 +75,10 @@ settings.put('/ai-keys', async (c) => {
 // GET /api/settings/gemini-models — diagnóstico: lista los modelos Gemini realmente
 // disponibles para la key configurada (temporal, para depurar límites de cuota por modelo).
 settings.get('/gemini-models', async (c) => {
-  const { results } = await c.env.DB
+  const row = await c.env.DB
     .prepare("SELECT value FROM settings WHERE key = 'gemini_api_key' LIMIT 1")
-    .all<{ value: string }>();
-  const key = results[0]?.value || c.env.GEMINI_API_KEY;
+    .first<{ value: string }>();
+  const key = (await decryptSafe(row?.value, c.env.ENCRYPTION_KEY)) || c.env.GEMINI_API_KEY;
   if (!key) return c.json({ success: false, error: 'No hay GEMINI_API_KEY configurada' }, 400);
 
   const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);

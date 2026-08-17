@@ -1,5 +1,6 @@
 import type { Env } from '../types/env';
 import type { AiKeys, AiProvider } from './aiProviders';
+import { decrypt } from './crypto';
 
 const KEY_MAP: Record<keyof AiKeys, string> = {
   gemini: 'gemini_api_key',
@@ -7,15 +8,31 @@ const KEY_MAP: Record<keyof AiKeys, string> = {
   mistral: 'mistral_api_key',
 };
 
+async function tryDecrypt(value: string | undefined, encryptionKey: string): Promise<string | undefined> {
+  if (!value) return undefined;
+  try {
+    return await decrypt(value, encryptionKey);
+  } catch {
+    // Valores guardados antes de activar el cifrado quedan en texto plano;
+    // se devuelven tal cual para no romper claves ya configuradas.
+    return value;
+  }
+}
+
 export async function getAiKeys(db: D1Database, env: Env): Promise<AiKeys> {
   const { results } = await db
     .prepare("SELECT key, value FROM settings WHERE key IN ('gemini_api_key','openrouter_api_key','mistral_api_key')")
     .all<{ key: string; value: string }>();
   const stored = Object.fromEntries(results.map((r) => [r.key, r.value]));
+  const [gemini, openrouter, mistral] = await Promise.all([
+    tryDecrypt(stored[KEY_MAP.gemini], env.ENCRYPTION_KEY),
+    tryDecrypt(stored[KEY_MAP.openrouter], env.ENCRYPTION_KEY),
+    tryDecrypt(stored[KEY_MAP.mistral], env.ENCRYPTION_KEY),
+  ]);
   return {
-    gemini: stored[KEY_MAP.gemini] || env.GEMINI_API_KEY || undefined,
-    openrouter: stored[KEY_MAP.openrouter] || env.OPENROUTER_API_KEY || undefined,
-    mistral: stored[KEY_MAP.mistral] || env.MISTRAL_API_KEY || undefined,
+    gemini: gemini || env.GEMINI_API_KEY || undefined,
+    openrouter: openrouter || env.OPENROUTER_API_KEY || undefined,
+    mistral: mistral || env.MISTRAL_API_KEY || undefined,
   };
 }
 
