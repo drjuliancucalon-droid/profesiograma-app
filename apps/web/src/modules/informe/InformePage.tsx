@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Printer, Maximize, Minimize, ZoomIn, ZoomOut, AlignLeft, AlignCenter, AlignRight, ArrowUp, ArrowDown, BrainCircuit } from 'lucide-react';
+import { Printer, ZoomIn, ZoomOut, AlignLeft, AlignCenter, AlignRight, ArrowUp, ArrowDown, BrainCircuit } from 'lucide-react';
 import { useProfesiogramaStore } from '../../store/profesiogramaStore';
 import { EditableDiv } from '../../shared/ui/EditableDiv';
 import { MomentoBadge } from '../../shared/ui/MomentoBadge';
@@ -19,7 +19,6 @@ const TABS: { id: Section; label: string }[] = [
 export function InformePage() {
   const { generatedData, empresaInfo, profesionalInfo, logoStyles, setLogoStyles, updateCargo, toggleMomento } = useProfesiogramaStore();
   const [section, setSection] = useState<Section>('all');
-  const [fitToPage, setFitToPage] = useState(true);
 
   if (!generatedData.length) {
     return (
@@ -34,7 +33,7 @@ export function InformePage() {
   const show = (id: Section) => section === id || section === 'all';
 
   return (
-    <div className={fitToPage ? 'fit-to-page-mode' : ''}>
+    <div>
       <div className="flex flex-wrap border-b border-slate-700 mb-6 print:hidden gap-2">
         {TABS.map((t) => (
           <button
@@ -57,9 +56,6 @@ export function InformePage() {
             <p className="text-sm text-slate-400 mt-1">Haz clic en los textos para editarlos directamente antes de imprimir.</p>
           </div>
           <div className="flex gap-3 items-center">
-            <button onClick={() => setFitToPage(!fitToPage)} className={`px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 text-sm border transition-all ${fitToPage ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-transparent text-indigo-300 border-indigo-800'}`}>
-              {fitToPage ? <Minimize size={15} /> : <Maximize size={15} />} {fitToPage ? 'Ajuste a Carta ACTIVO' : 'Ajustar a Carta'}
-            </button>
             <button onClick={() => window.print()} className="bg-slate-950 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 transition-all text-sm">
               <Printer size={15} /> Imprimir / Guardar PDF
             </button>
@@ -147,34 +143,34 @@ export function InformePage() {
         <div className="print-section-container">
           <h2 className="text-xl font-serif font-bold uppercase tracking-wide text-slate-100 border-b border-slate-700 pb-4 mb-6 print:text-black print:border-black">1. Matriz de Evaluaciones Médicas (I-P-R-PI-RL)</h2>
           <div className="matriz-table-container overflow-x-auto rounded-2xl border border-slate-700 bg-slate-900 print:border-black">
-            <table className="matriz-table w-max min-w-full text-[9px] border-collapse bg-slate-950 table-fixed">
+            <table className="matriz-table border-collapse bg-slate-950" style={{ width: '100%', minWidth: 1400 }}>
               <thead>
-                <tr className="text-[7.5px] uppercase tracking-widest text-slate-300 text-center print:text-black">
-                  <th rowSpan={2} className="bg-slate-800 p-2 border border-slate-700 w-[9%] font-bold print:bg-slate-100 print:border-black">Grupo Ocupacional</th>
-                  <th rowSpan={2} className="bg-slate-800 p-2 border border-slate-700 w-[11%] font-bold print:bg-slate-100 print:border-black">Cargos</th>
-                  <th rowSpan={2} className="bg-slate-800 p-2 border border-slate-700 w-[20%] font-bold print:bg-slate-100 print:border-black">Perfil del Cargo</th>
-                  <th rowSpan={2} className="bg-slate-800 p-2 border border-slate-700 w-[20%] font-bold print:bg-slate-100 print:border-black">Peligros y Riesgos</th>
+                <tr className="text-[11px] uppercase tracking-wide text-slate-300 text-center print:text-black">
+                  <th className="bg-slate-800 p-3 border border-slate-700 font-bold print:bg-slate-100 print:border-black text-left" style={{ minWidth: 130 }}>Grupo Ocupacional</th>
+                  <th className="bg-slate-800 p-3 border border-slate-700 font-bold print:bg-slate-100 print:border-black text-left" style={{ minWidth: 140 }}>Cargo</th>
+                  <th className="bg-slate-800 p-3 border border-slate-700 font-bold print:bg-slate-100 print:border-black text-left" style={{ minWidth: 260 }}>Perfil del Cargo</th>
+                  <th className="bg-slate-800 p-3 border border-slate-700 font-bold print:bg-slate-100 print:border-black text-left" style={{ minWidth: 220 }}>Peligros y Riesgos</th>
                   {EXAMENES_MATRIZ.map((e) => (
-                    <th key={e.key} className="bg-indigo-950 p-1.5 border border-indigo-900 text-indigo-200 print:bg-slate-300 print:text-black print:border-black w-[4.4%]">{e.label}</th>
+                    <th key={e.key} className="bg-indigo-950 p-2 border border-indigo-900 text-indigo-200 print:bg-slate-300 print:text-black print:border-black" style={{ minWidth: 150 }}>{e.label}</th>
                   ))}
-                  <th className="bg-emerald-950 p-1.5 border border-emerald-900 text-emerald-200 print:bg-slate-300 print:text-black print:border-black w-[4.4%]">Otros Labs</th>
+                  <th className="bg-emerald-950 p-2 border border-emerald-900 text-emerald-200 print:bg-slate-300 print:text-black print:border-black" style={{ minWidth: 150 }}>Otros Labs</th>
                 </tr>
               </thead>
               <tbody>
                 {generatedData.map((row, idx) => (
                   <tr key={idx} className="hover:bg-slate-800/50 transition-colors break-inside-avoid">
-                    <td className="border border-slate-700 p-2 align-top bg-slate-900 break-words font-bold text-slate-200 text-[8px] print:text-black print:border-black print:bg-white">{row.grupo_ocupacional}</td>
-                    <td className="border border-slate-700 p-2 align-top break-words font-serif font-black text-[9px] text-slate-100 leading-tight print:text-black print:border-black">{row.cargo}</td>
-                    <td className="border border-slate-700 p-2 align-top break-words print:border-black">
-                      <div className="space-y-1.5">
-                        <div className="text-[7.5px] text-slate-400 print:text-black leading-tight"><strong className="text-slate-200 print:text-black">Descripción:</strong> {row.perfil_cargo?.descripcion}</div>
-                        <div className="text-[7.5px] text-slate-400 print:text-black leading-tight pt-1 border-t border-slate-800"><strong className="text-slate-200 print:text-black">Competencias:</strong> {row.perfil_cargo?.competencias}</div>
-                        <div className="text-[7.5px] text-slate-400 print:text-black leading-tight pt-1 border-t border-slate-800"><strong className="text-slate-200 print:text-black">Físico:</strong> {row.perfil_cargo?.requisitos_fisicos}</div>
+                    <td className="border border-slate-700 p-3 align-top bg-slate-900 break-words font-bold text-slate-200 text-xs print:text-black print:border-black print:bg-white">{row.grupo_ocupacional}</td>
+                    <td className="border border-slate-700 p-3 align-top break-words font-serif font-black text-sm text-slate-100 leading-snug print:text-black print:border-black">{row.cargo}</td>
+                    <td className="border border-slate-700 p-3 align-top break-words print:border-black">
+                      <div className="space-y-2">
+                        <div className="text-xs text-slate-400 print:text-black leading-snug"><strong className="text-slate-200 print:text-black">Descripción:</strong> {row.perfil_cargo?.descripcion}</div>
+                        <div className="text-xs text-slate-400 print:text-black leading-snug pt-1.5 border-t border-slate-800"><strong className="text-slate-200 print:text-black">Competencias:</strong> {row.perfil_cargo?.competencias}</div>
+                        <div className="text-xs text-slate-400 print:text-black leading-snug pt-1.5 border-t border-slate-800"><strong className="text-slate-200 print:text-black">Físico:</strong> {row.perfil_cargo?.requisitos_fisicos}</div>
                       </div>
                     </td>
-                    <td className="border border-slate-700 p-2 align-top break-words text-[7.5px] text-slate-400 print:text-black leading-tight text-justify print:border-black">{row.peligros_riesgos}</td>
+                    <td className="border border-slate-700 p-3 align-top break-words text-xs text-slate-400 print:text-black leading-snug text-justify print:border-black">{row.peligros_riesgos}</td>
                     {EXAMENES_MATRIZ.map((e) => (
-                      <td key={e.key} className="border border-slate-700 align-top p-1 text-center bg-slate-950 print:border-black print:bg-white">
+                      <td key={e.key} className="border border-slate-700 align-top p-2 text-center bg-slate-950 print:border-black print:bg-white">
                         <MomentoBadge
                           data={(row.matriz as unknown as Record<string, Record<string, boolean>>)?.[e.key] ?? {}}
                           onChange={(mk, val) => toggleMomento(idx, e.key, mk, val)}
@@ -186,7 +182,7 @@ export function InformePage() {
                         />
                       </td>
                     ))}
-                    <td className="border border-slate-700 align-top p-1 text-center bg-emerald-950/20 print:border-black print:bg-white">
+                    <td className="border border-slate-700 align-top p-2 text-center bg-emerald-950/20 print:border-black print:bg-white">
                       <EditableDiv value={row.matriz?.laboratorio} onChange={(val) => updateCargo(idx, 'matriz.laboratorio', val)} placeholder="Nombre Lab..." />
                       <EditableDiv value={row.matriz_observaciones?.laboratorio} onChange={(val) => updateCargo(idx, 'matriz_observaciones.laboratorio', val)} placeholder="Añadir..." />
                     </td>

@@ -143,14 +143,8 @@ button {
   font-family: inherit;
 }
 
-.fit-to-page-mode .matriz-table-container {
-  width: 100% !important;
-  overflow: hidden !important;
-}
-.fit-to-page-mode .matriz-table {
-  width: 100% !important;
-  min-width: 100% !important;
-  table-layout: fixed;
+.matriz-table-container {
+  -webkit-overflow-scrolling: touch;
 }
 
 @media print {
@@ -184,5 +178,14 @@ button {
   .break-inside-avoid {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
+  }
+  .matriz-table-container {
+    overflow: visible !important;
+  }
+  .matriz-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed;
+    font-size: 8px !important;
   }
 }
