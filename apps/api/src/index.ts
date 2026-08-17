@@ -9,24 +9,26 @@ import historialRoutes from './routes/historial';
 import usersRoutes from './routes/users';
 import ordenesRoutes from './routes/ordenes';
 import pdfRoutes from './routes/pdf';
-import type { Env } from './types/env';
+import type { Env, HonoEnv } from './types/env';
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<HonoEnv>();
 
-// ── Middlewares globales ──────────────────────────────────────
+// ── Middlewares globales ──────────────────────────────────────────
 app.use('*', logger());
 app.use('*', cors({
-  origin: (origin, c) => c.env.CORS_ORIGIN ?? origin,
+  origin: (origin, c) => (c.env as unknown as Env).CORS_ORIGIN ?? origin,
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
 app.use('/api/profesiograma/generate', rateLimitMiddleware(10, 60_000));
 
-// ── Health ────────────────────────────────────────────────────
-app.get('/health', c => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
+// ── Health ────────────────────────────────────────────────────────
+app.get('/health', (c) =>
+  c.json({ status: 'ok', timestamp: new Date().toISOString() })
+);
 
-// ── Rutas ─────────────────────────────────────────────────────
+// ── Rutas ─────────────────────────────────────────────────────────
 app.route('/api/auth',          authRoutes);
 app.route('/api/profesiograma', profesiogramaRoutes);
 app.route('/api/empresas',      empresasRoutes);
@@ -35,8 +37,8 @@ app.route('/api/users',         usersRoutes);
 app.route('/api/ordenes',       ordenesRoutes);
 app.route('/api/pdf',           pdfRoutes);
 
-// ── Fallbacks ─────────────────────────────────────────────────
-app.notFound(c  => c.json({ success: false, error: 'Ruta no encontrada' }, 404));
+// ── Fallbacks ─────────────────────────────────────────────────────
+app.notFound((c) => c.json({ success: false, error: 'Ruta no encontrada' }, 404));
 app.onError((err, c) => {
   console.error(err);
   return c.json({ success: false, error: 'Error interno del servidor' }, 500);
