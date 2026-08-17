@@ -16,7 +16,13 @@ const app = new Hono<HonoEnv>();
 // ── Middlewares globales ──────────────────────────────────────────
 app.use('*', logger());
 app.use('*', cors({
-  origin: (origin, c) => (c.env as unknown as Env).CORS_ORIGIN ?? origin,
+  origin: (origin, c) => {
+    const allowed = (c.env as unknown as Env).CORS_ORIGIN;
+    if (!origin) return allowed;
+    if (origin === allowed) return origin;
+    if (/^http:\/\/localhost:\d+$/.test(origin)) return origin;
+    return allowed;
+  },
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
