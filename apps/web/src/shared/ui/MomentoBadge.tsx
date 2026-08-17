@@ -1,14 +1,20 @@
-const MOMENTOS = ['I', 'P', 'R', 'PI', 'RL'] as const;
+const MOMENTOS = [
+  { key: 'I', color: '#60a5fa' },
+  { key: 'P', color: '#34d399' },
+  { key: 'R', color: '#f59e0b' },
+  { key: 'PI', color: '#a78bfa' },
+  { key: 'RL', color: '#f472b6' },
+] as const;
 
 interface MomentoBadgeProps {
-  data: Partial<Record<(typeof MOMENTOS)[number], boolean>>;
+  data: Partial<Record<(typeof MOMENTOS)[number]['key'], boolean>>;
   onChange: (key: string, value: boolean) => void;
 }
 
 export function MomentoBadge({ data, onChange }: MomentoBadgeProps) {
   return (
     <div style={{ display: 'flex', gap: 3, justifyContent: 'center', flexWrap: 'wrap' }}>
-      {MOMENTOS.map((m) => {
+      {MOMENTOS.map(({ key: m, color }) => {
         const active = !!data[m];
         return (
           <button
@@ -17,14 +23,14 @@ export function MomentoBadge({ data, onChange }: MomentoBadgeProps) {
             onClick={() => onChange(m, !active)}
             title={m}
             style={{
-              width: 22,
-              height: 22,
+              width: 20,
+              height: 20,
               borderRadius: 6,
-              fontSize: '0.6rem',
+              fontSize: '0.58rem',
               fontWeight: 700,
-              border: `1px solid ${active ? '#f59e0b' : 'var(--color-border)'}`,
-              background: active ? 'rgba(245,158,11,0.18)' : 'transparent',
-              color: active ? '#f59e0b' : 'var(--color-text-faint)',
+              border: `1px solid ${active ? color : 'var(--color-border)'}`,
+              background: active ? `${color}26` : 'transparent',
+              color: active ? color : 'var(--color-text-faint)',
               cursor: 'pointer',
               padding: 0,
             }}

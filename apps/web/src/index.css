@@ -142,3 +142,47 @@ input,
 button {
   font-family: inherit;
 }
+
+.fit-to-page-mode .matriz-table-container {
+  width: 100% !important;
+  overflow: hidden !important;
+}
+.fit-to-page-mode .matriz-table {
+  width: 100% !important;
+  min-width: 100% !important;
+  table-layout: fixed;
+}
+
+@media print {
+  @page {
+    size: letter landscape;
+    margin: 8mm;
+  }
+  body {
+    background: white !important;
+  }
+  .print\:hidden {
+    display: none !important;
+  }
+  .print\:block {
+    display: block !important;
+  }
+  .print-section-container {
+    width: 100%;
+    margin-bottom: 30px;
+    page-break-inside: avoid;
+  }
+  .page-break {
+    page-break-before: always;
+    display: block;
+    height: 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .break-inside-avoid {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}

@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Building2, BrainCircuit, ClipboardList, History, LogOut, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Building2, BrainCircuit, ClipboardList, History, LogOut, ShieldCheck, FileText, Settings } from 'lucide-react';
 import { useAuthStore } from './store/authStore';
 import { LoginPage } from './modules/auth/LoginPage';
 import { DashboardPage } from './modules/dashboard/DashboardPage';
@@ -7,17 +7,21 @@ import { EmpresasPage } from './modules/empresas/EmpresasPage';
 import { HistorialPage } from './modules/historial/HistorialPage';
 import { OrdenesPage } from './modules/ordenes/OrdenesPage';
 import { ProfesiogramaGeneratorPage } from './modules/profesiograma/ProfesiogramaGeneratorPage';
+import { InformePage } from './modules/informe/InformePage';
+import { SettingsPage } from './modules/settings/SettingsPage';
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const token = useAuthStore((s) => s.token);
+function ProtectedRoute({ children, adminOnly }: { children: React.ReactNode; adminOnly?: boolean }) {
+  const { token, user } = useAuthStore();
   const location = useLocation();
   if (!token) return <Navigate to="/login" state={{ from: location }} replace />;
+  if (adminOnly && user?.rol !== 'admin') return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/profesiograma', label: 'Profesiograma', icon: BrainCircuit },
+  { to: '/informe', label: 'Informe', icon: FileText },
   { to: '/empresas', label: 'Empresas', icon: Building2 },
   { to: '/ordenes', label: 'Órdenes', icon: ClipboardList },
   { to: '/historial', label: 'Historial', icon: History },
@@ -26,10 +30,12 @@ const NAV_ITEMS = [
 function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { user, logout } = useAuthStore();
+  const navItems = user?.rol === 'admin' ? [...NAV_ITEMS, { to: '/settings', label: 'Ajustes', icon: Settings }] : NAV_ITEMS;
 
   return (
     <div style={{ display: 'flex', minHeight: '100dvh', background: 'var(--color-bg)' }}>
       <aside
+        className="print:hidden"
         style={{
           width: 240,
           flexShrink: 0,
@@ -47,7 +53,7 @@ function Layout({ children }: { children: React.ReactNode }) {
           </span>
         </div>
 
-        {NAV_ITEMS.map(({ to, label, icon: Icon }) => {
+        {navItems.map(({ to, label, icon: Icon }) => {
           const active = location.pathname.startsWith(to);
           return (
             <Link
@@ -85,7 +91,7 @@ function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main style={{ flex: 1, padding: '32px 40px', overflowY: 'auto' }}>{children}</main>
+      <main className="print:p-0 print:w-full" style={{ flex: 1, padding: '32px 40px', overflowY: 'auto' }}>{children}</main>
     </div>
   );
 }
@@ -110,6 +116,16 @@ export function App() {
           <ProtectedRoute>
             <Layout>
               <ProfesiogramaGeneratorPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/informe"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <InformePage />
             </Layout>
           </ProtectedRoute>
         }
@@ -140,6 +156,16 @@ export function App() {
           <ProtectedRoute>
             <Layout>
               <HistorialPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute adminOnly>
+            <Layout>
+              <SettingsPage />
             </Layout>
           </ProtectedRoute>
         }

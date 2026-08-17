@@ -37,6 +37,9 @@ interface ProfesiogramaState {
   setEmpresaInfo: (partial: Partial<EmpresaInfo>) => void;
   profesionalInfo: ProfesionalInfo;
   setProfesionalInfo: (partial: Partial<ProfesionalInfo>) => void;
+
+  logoStyles: { size: number; align: 'left' | 'center' | 'right'; marginY: number };
+  setLogoStyles: (partial: Partial<{ size: number; align: 'left' | 'center' | 'right'; marginY: number }>) => void;
 }
 
 function setByPath<T extends Record<string, unknown>>(obj: T, path: string, value: unknown): T {
@@ -84,4 +87,7 @@ export const useProfesiogramaStore = create<ProfesiogramaState>((set) => ({
   setEmpresaInfo: (partial) => set((s) => ({ empresaInfo: { ...s.empresaInfo, ...partial } })),
   profesionalInfo: { nombre: '', cedula: '', titulo: '', licencia: '', celular: '', correo: '' },
   setProfesionalInfo: (partial) => set((s) => ({ profesionalInfo: { ...s.profesionalInfo, ...partial } })),
+
+  logoStyles: { size: 96, align: 'center', marginY: 0 },
+  setLogoStyles: (partial) => set((s) => ({ logoStyles: { ...s.logoStyles, ...partial } })),
 }));

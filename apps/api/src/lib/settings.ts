@@ -1,0 +1,32 @@
+import type { Env } from '../types/env';
+import type { AiKeys, AiProvider } from './aiProviders';
+
+const KEY_MAP: Record<keyof AiKeys, string> = {
+  gemini: 'gemini_api_key',
+  openrouter: 'openrouter_api_key',
+  mistral: 'mistral_api_key',
+};
+
+export async function getAiKeys(db: D1Database, env: Env): Promise<AiKeys> {
+  const { results } = await db
+    .prepare("SELECT key, value FROM settings WHERE key IN ('gemini_api_key','openrouter_api_key','mistral_api_key')")
+    .all<{ key: string; value: string }>();
+  const stored = Object.fromEntries(results.map((r) => [r.key, r.value]));
+  return {
+    gemini: stored[KEY_MAP.gemini] || env.GEMINI_API_KEY || undefined,
+    openrouter: stored[KEY_MAP.openrouter] || env.OPENROUTER_API_KEY || undefined,
+    mistral: stored[KEY_MAP.mistral] || env.MISTRAL_API_KEY || undefined,
+  };
+}
+
+export async function getPrimaryProvider(db: D1Database): Promise<AiProvider> {
+  const row = await db.prepare("SELECT value FROM settings WHERE key = 'ai_primary_provider' LIMIT 1").first<{ value: string }>();
+  const value = row?.value;
+  if (value === 'gemini' || value === 'openrouter' || value === 'mistral') return value;
+  return 'gemini';
+}
+
+export function providerOrder(primary: AiProvider): AiProvider[] {
+  const all: AiProvider[] = ['gemini', 'openrouter', 'mistral'];
+  return [primary, ...all.filter((p) => p !== primary)];
+}

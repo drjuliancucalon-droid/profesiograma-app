@@ -9,6 +9,7 @@ import historialRoutes from './routes/historial';
 import usersRoutes from './routes/users';
 import ordenesRoutes from './routes/ordenes';
 import pdfRoutes from './routes/pdf';
+import settingsRoutes from './routes/settings';
 import type { Env, HonoEnv } from './types/env';
 
 const app = new Hono<HonoEnv>();
@@ -42,6 +43,7 @@ app.route('/api/historial',     historialRoutes);
 app.route('/api/users',         usersRoutes);
 app.route('/api/ordenes',       ordenesRoutes);
 app.route('/api/pdf',           pdfRoutes);
+app.route('/api/settings',      settingsRoutes);
 
 // ── Fallbacks ─────────────────────────────────────────────────────
 app.notFound((c) => c.json({ success: false, error: 'Ruta no encontrada' }, 404));

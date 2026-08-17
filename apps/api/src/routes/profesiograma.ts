@@ -1,18 +1,30 @@
 import { Hono } from 'hono';
 import type { HonoEnv } from '../types/env';
 import { requireAuth, requireRole } from '../middleware/auth';
+import { generateWithFallback } from '../lib/aiProviders';
+import { getAiKeys, getPrimaryProvider, providerOrder } from '../lib/settings';
 
 const profesiograma = new Hono<HonoEnv>();
 
 const SYSTEM_PROMPT = `ACTÚA COMO MÉDICO ESPECIALISTA EN MEDICINA DEL TRABAJO Y SST EN COLOMBIA CON 15 AÑOS DE EXPERIENCIA.
-TU OBJETIVO: Estructurar la matriz de evaluaciones médicas de un Profesiograma con rigor técnico.
+TU OBJETIVO: Estructurar la matriz de evaluaciones médicas de un Profesiograma con rigor técnico absoluto y fundamentación por momento.
+CRITERIO DE ANÁLISIS MÉDICO-LEGAL:
+1. Realiza una investigación profunda del cargo y sus peligros (Biomecánicos, Físicos, Químicos, Psicosociales, Fenómenos Naturales, Seguridad).
+2. Determina con FUNDAMENTO TÉCNICO en qué momentos exactos (I, P, R, PI, RL) es NECESARIO realizar cada prueba.
+3. Clasifica qué exámenes son OBLIGATORIOS (por ley o riesgo crítico) y cuáles son ELECTIVOS (preventivos o de vigilancia).
+4. La fundamentación debe explicar el porqué de la conducta médica para cada momento (I, P, R, PI, RL).
+5. En 'matriz_observaciones', proporciona una explicación MUY BREVE (ej. "Obligatorio (Anual)", "Sugerido (Ingreso)"). Si NO ES NECESARIO o no aplica, déjalo ESTRICTAMENTE vacío "".
 
 ESTRUCTURA JSON ESTRICTA:
 {
-  "grupoocupacional": "Categoría general",
+  "grupo_ocupacional": "Categoría general",
   "cargo": "Nombre del cargo",
-  "perfilcargo": { "descripcion": "", "competencias": "", "requisitosfisicos": "" },
-  "peligrosriesgos": "",
+  "perfil_cargo": {
+    "descripcion": "Análisis técnico de la labor",
+    "competencias": "Habilidades requeridas",
+    "requisitos_fisicos": "Demandas fisiológicas"
+  },
+  "peligros_riesgos": "Detalle técnico de exposición",
   "matriz": {
     "fisico": {"I":true,"P":true,"R":true,"PI":true,"RL":true},
     "osteomuscular": {"I":true,"P":true,"R":true,"PI":true,"RL":true},
@@ -21,33 +33,29 @@ ESTRUCTURA JSON ESTRICTA:
     "visiometria": {"I":false,"P":false,"R":false,"PI":false,"RL":false},
     "electrocardiograma": {"I":false,"P":false,"R":false,"PI":false,"RL":false},
     "glicemia": {"I":false,"P":false,"R":false,"PI":false,"RL":false},
-    "perfillipidico": {"I":false,"P":false,"R":false,"PI":false,"RL":false},
-    "laboratorio": ""
+    "perfil_lipidico": {"I":false,"P":false,"R":false,"PI":false,"RL":false},
+    "laboratorio": "Menciona laboratorios adicionales"
   },
-  "matrizobservaciones": {},
-  "fundamentaciontecnica": { "porquemomentos": "", "obligatorios": [], "electivos": [] },
-  "recomendacionesrestricciones": []
-}`;
-
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  maxRetries = 3
-): Promise<Response> {
-  let delay = 1000;
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      const response = await fetch(url, options);
-      if (response.ok) return response;
-      if (i === maxRetries - 1) throw new Error(`HTTP ${response.status}`);
-    } catch (err) {
-      if (i === maxRetries - 1) throw err;
-      await new Promise(res => setTimeout(res, delay));
-      delay *= 2;
+  "matriz_observaciones": {
+    "fisico": "", "osteomuscular": "", "psicosensometrico": "", "audiometria": "",
+    "visiometria": "", "electrocardiograma": "", "glicemia": "", "perfil_lipidico": "", "laboratorio": ""
+  },
+  "fundamentacion_tecnica": {
+    "por_que_momentos": "Explicación técnica.",
+    "obligatorios": ["Lista de exámenes obligatorios por ley o riesgo"],
+    "electivos": ["Lista de exámenes opcionales o de vigilancia recomendada"]
+  },
+  "recomendaciones_restricciones": [
+    {
+      "factor_riesgo": "Riesgo",
+      "condicion": "Condición potencial",
+      "recomendaciones": "Medidas",
+      "restricciones": "Limitaciones",
+      "temporalidad": "Tiempo",
+      "seguimiento": "Plan"
     }
-  }
-  throw new Error('Max retries reached');
-}
+  ]
+}`;
 
 // POST /api/profesiograma/generate
 profesiograma.post(
@@ -58,26 +66,18 @@ profesiograma.post(
     const { cargo } = await c.req.json<{ cargo?: string; profesiograma_id?: string }>();
     if (!cargo) return c.json({ success: false, error: 'El campo cargo es requerido' }, 400);
     try {
-      const resp = await fetchWithRetry(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${c.env.GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: `Analiza este cargo: ${cargo}` }] }],
-            systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-            generationConfig: { responseMimeType: 'application/json' },
-          }),
-        }
+      const [keys, primary] = await Promise.all([
+        getAiKeys(c.env.DB, c.env),
+        getPrimaryProvider(c.env.DB),
+      ]);
+      const { text } = await generateWithFallback(
+        keys,
+        providerOrder(primary),
+        SYSTEM_PROMPT,
+        `Analiza este cargo: "${cargo}". Escríbelo exactamente igual en el JSON devuelto.`
       );
-      const data = await resp.json() as {
-        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      };
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) throw new Error('IA no devolvió respuesta válida');
-      const parsed: unknown = JSON.parse(
-        text.replace(/```json/g, '').replace(/```/g, '').trim()
-      );
+      const match = text.replace(/```json/g, '').replace(/```/g, '').trim().match(/\{[\s\S]*\}/);
+      const parsed: unknown = JSON.parse(match ? match[0] : text);
       return c.json({ success: true, data: parsed });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error del motor IA';
@@ -129,12 +129,12 @@ profesiograma.post(
           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
         `).bind(
           crypto.randomUUID(), profId,
-          cd.grupoocupacional ?? 'General',
+          cd.grupo_ocupacional ?? 'General',
           cd.cargo ?? '',
-          (cd.perfilcargo as Record<string, unknown>)?.descripcion ?? null,
-          (cd.perfilcargo as Record<string, unknown>)?.competencias ?? null,
-          (cd.perfilcargo as Record<string, unknown>)?.requisitosfisicos ?? null,
-          cd.peligrosriesgos ?? null,
+          (cd.perfil_cargo as Record<string, unknown>)?.descripcion ?? null,
+          (cd.perfil_cargo as Record<string, unknown>)?.competencias ?? null,
+          (cd.perfil_cargo as Record<string, unknown>)?.requisitos_fisicos ?? null,
+          cd.peligros_riesgos ?? null,
           JSON.stringify(cd.matriz ?? {}),
           JSON.stringify(cd),
           now, now

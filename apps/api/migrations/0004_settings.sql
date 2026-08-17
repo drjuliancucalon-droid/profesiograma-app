@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  actualizado_por TEXT,
+  actualizado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

@@ -3,7 +3,9 @@ export interface Env {
   ASSETS: R2Bucket;
   BROWSER: Fetcher;
   JWT_SECRET: string;
-  GEMINI_API_KEY: string;
+  GEMINI_API_KEY?: string;
+  OPENROUTER_API_KEY?: string;
+  MISTRAL_API_KEY?: string;
   ENVIRONMENT: string;
   CORS_ORIGIN: string;
 }

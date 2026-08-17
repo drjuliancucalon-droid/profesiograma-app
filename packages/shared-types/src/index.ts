@@ -53,7 +53,7 @@ export interface MatrizExamenes {
   visiometria: MomentoMatrix;
   electrocardiograma: MomentoMatrix;
   glicemia: MomentoMatrix;
-  perfillipidico: MomentoMatrix;
+  perfil_lipidico: MomentoMatrix;
   laboratorio: string;
 }
 
@@ -65,18 +65,18 @@ export interface MatrizObservaciones {
   visiometria?: string;
   electrocardiograma?: string;
   glicemia?: string;
-  perfillipidico?: string;
+  perfil_lipidico?: string;
   laboratorio?: string;
 }
 
 export interface FundamentacionTecnica {
-  porqueMomentos: string;
+  por_que_momentos: string;
   obligatorios: string[];
   electivos: string[];
 }
 
 export interface RecomendacionRestriccion {
-  factorRiesgo: string;
+  factor_riesgo: string;
   condicion: string;
   recomendaciones: string;
   restricciones: string;
@@ -86,18 +86,18 @@ export interface RecomendacionRestriccion {
 
 export interface CargoProfesiograma {
   id?: string;
-  grupoOcupacional: string;
+  grupo_ocupacional: string;
   cargo: string;
-  perfilCargo: {
+  perfil_cargo: {
     descripcion: string;
     competencias: string;
-    requisitosFisicos: string;
+    requisitos_fisicos: string;
   };
-  peligrosRiesgos: string;
+  peligros_riesgos: string;
   matriz: MatrizExamenes;
-  matrizObservaciones: MatrizObservaciones;
-  fundamentacionTecnica: FundamentacionTecnica;
-  recomendacionesRestricciones: RecomendacionRestriccion[];
+  matriz_observaciones: MatrizObservaciones;
+  fundamentacion_tecnica: FundamentacionTecnica;
+  recomendaciones_restricciones: RecomendacionRestriccion[];
 }
 
 export interface Profesiograma {
