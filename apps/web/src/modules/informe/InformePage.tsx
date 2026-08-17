@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Printer, ZoomIn, ZoomOut, AlignLeft, AlignCenter, AlignRight, ArrowUp, ArrowDown, BrainCircuit } from 'lucide-react';
+import { Printer, ZoomIn, ZoomOut, AlignLeft, AlignCenter, AlignRight, ArrowUp, ArrowDown, BrainCircuit, Save, Loader2, CheckCircle2 } from 'lucide-react';
 import { useProfesiogramaStore } from '../../store/profesiogramaStore';
 import { EditableDiv } from '../../shared/ui/EditableDiv';
 import { MomentoBadge } from '../../shared/ui/MomentoBadge';
 import { MARCO_LEGAL, DESCRIPCION_PRUEBAS, INSTRUCTIVO_STEPS, EXAMENES_MATRIZ } from '../../shared/data/legal';
+import { api } from '../../shared/lib/api';
+
+interface Empresa { id: string; nombre: string; nit: string | null }
 
 type Section = 'all' | 'presentacion' | 'matriz' | 'recomendaciones' | 'pruebas' | 'legal';
 
@@ -19,6 +22,63 @@ const TABS: { id: Section; label: string }[] = [
 export function InformePage() {
   const { generatedData, empresaInfo, profesionalInfo, logoStyles, setLogoStyles, updateCargo, toggleMomento } = useProfesiogramaStore();
   const [section, setSection] = useState<Section>('all');
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleSave = async () => {
+    if (!empresaInfo.nombre.trim()) {
+      setSaveMsg({ type: 'error', text: 'Ingresa el nombre de la empresa antes de guardar (pestaña Configuración).' });
+      return;
+    }
+    setSaving(true);
+    setSaveMsg(null);
+    try {
+      // 1. Buscar o crear la empresa
+      const listRes = await api.get<{ success: boolean; data?: Empresa[] }>('/empresas');
+      const existing = listRes.data?.find((e) =>
+        (empresaInfo.nit && e.nit && e.nit.trim() === empresaInfo.nit.trim()) ||
+        (!empresaInfo.nit && e.nombre.trim().toLowerCase() === empresaInfo.nombre.trim().toLowerCase())
+      );
+      let empresaId = existing?.id;
+      if (!empresaId) {
+        const createRes = await api.post<{ success: boolean; id?: string; error?: string }>('/empresas', {
+          nombre: empresaInfo.nombre,
+          nit: empresaInfo.nit || undefined,
+          responsable_sg_sst: empresaInfo.responsable || undefined,
+        });
+        if (!createRes.success || !createRes.id) throw new Error(createRes.error ?? 'No se pudo crear la empresa');
+        empresaId = createRes.id;
+      }
+
+      // 2. Buscar o crear el profesional (el backend lo requiere siempre)
+      const profRes = await api.post<{ success: boolean; id?: string; error?: string }>('/profesionales', {
+        nombre: profesionalInfo.nombre.trim() || 'No especificado',
+        cedula: profesionalInfo.cedula || undefined,
+        titulo: profesionalInfo.titulo || undefined,
+        licencia: profesionalInfo.licencia || undefined,
+        celular: profesionalInfo.celular || undefined,
+        correo: profesionalInfo.correo || undefined,
+      });
+      if (!profRes.success || !profRes.id) throw new Error(profRes.error ?? 'No se pudo guardar el profesional');
+      const profesionalId = profRes.id;
+
+      // 3. Guardar el profesiograma con los cargos generados
+      const saveRes = await api.post<{ success: boolean; id?: string; error?: string }>('/profesiograma', {
+        empresa_id: empresaId,
+        profesional_id: profesionalId,
+        fecha_emision: empresaInfo.fecha || undefined,
+        cargos_data: generatedData,
+      });
+      if (!saveRes.success) throw new Error(saveRes.error ?? 'No se pudo guardar el profesiograma');
+
+      setSaveMsg({ type: 'success', text: 'Profesiograma guardado correctamente. Puedes verlo en Historial.' });
+    } catch (err) {
+      setSaveMsg({ type: 'error', text: err instanceof Error ? err.message : 'Error al guardar.' });
+    } finally {
+      setSaving(false);
+      setTimeout(() => setSaveMsg(null), 6000);
+    }
+  };
 
   if (!generatedData.length) {
     return (
@@ -34,20 +94,32 @@ export function InformePage() {
 
   return (
     <div>
-      <div className="flex flex-wrap border-b border-slate-700 mb-6 print:hidden gap-2">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setSection(t.id)}
-            className={`px-4 py-3 text-sm font-bold border-b-2 transition-colors ${section === t.id || section === 'all' ? 'border-amber-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
-          >
-            {t.label}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 print:hidden">
+        <div className="flex flex-wrap border-b border-slate-700 gap-2">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setSection(t.id)}
+              className={`px-4 py-3 text-sm font-bold border-b-2 transition-colors ${section === t.id || section === 'all' ? 'border-amber-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+            >
+              {t.label}
+            </button>
+          ))}
+          <button onClick={() => setSection('all')} className="px-4 py-3 text-sm font-bold border-b-2 border-transparent text-indigo-400 hover:text-indigo-300">
+            Mostrar Todo (Imprimir)
           </button>
-        ))}
-        <button onClick={() => setSection('all')} className="px-4 py-3 text-sm font-bold border-b-2 border-transparent text-indigo-400 hover:text-indigo-300">
-          Mostrar Todo (Imprimir)
+        </div>
+        <button onClick={handleSave} disabled={saving} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all text-sm shrink-0">
+          {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+          {saving ? 'Guardando...' : 'Guardar Profesiograma'}
         </button>
       </div>
+
+      {saveMsg && (
+        <div className={`mb-6 p-3 rounded-xl text-sm font-medium flex items-center gap-2 print:hidden ${saveMsg.type === 'success' ? 'bg-emerald-950/40 border border-emerald-800 text-emerald-300' : 'bg-red-950/40 border border-red-800 text-red-300'}`}>
+          {saveMsg.type === 'success' && <CheckCircle2 size={16} />} {saveMsg.text}
+        </div>
+      )}
 
       {section === 'all' && (
         <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-5 mb-8 flex flex-col sm:flex-row justify-between items-center gap-4 print:hidden">

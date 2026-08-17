@@ -97,7 +97,6 @@ profesiograma.post(
       empresa_id?: string;
       profesional_id?: string;
       fecha_emision?: string;
-      observaciones?: string;
       cargos_data?: Array<Record<string, unknown>>;
     }>();
     const { empresa_id, profesional_id, cargos_data } = body;
@@ -112,21 +111,20 @@ profesiograma.post(
       const now = new Date().toISOString();
       await c.env.DB.prepare(`
         INSERT INTO profesiogramas
-        (id, empresa_id, profesional_id, fecha_emision, version, estado, observaciones, creado_por, creado_en, actualizado_en)
-        VALUES (?,?,?,?,1,'borrador',?,?,?,?)
+        (id, empresa_id, profesional_id, fecha_emision, version, estado, creado_por, creado_en, actualizado_en)
+        VALUES (?,?,?,?,1,'borrador',?,?,?)
       `).bind(
         profId, empresa_id, profesional_id,
         body.fecha_emision ?? now.slice(0, 10),
-        body.observaciones ?? null, user.sub, now, now
+        user.sub, now, now
       ).run();
 
       for (const cd of cargos_data) {
         await c.env.DB.prepare(`
           INSERT INTO cargos
-          (id, profesiograma_id, grupo_ocupacional, cargo, perfil_descripcion,
-           perfil_competencias, perfil_requisitos_fisicos, peligros_riesgos,
-           matriz_json, ia_raw_json, creado_en, actualizado_en)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+          (id, profesiograma_id, grupo_ocupacional, nombre_cargo, descripcion,
+           competencias, requisitos_fisicos, peligros_riesgos, ia_raw_json, creado_en, actualizado_en)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?)
         `).bind(
           crypto.randomUUID(), profId,
           cd.grupo_ocupacional ?? 'General',
@@ -135,7 +133,6 @@ profesiograma.post(
           (cd.perfil_cargo as Record<string, unknown>)?.competencias ?? null,
           (cd.perfil_cargo as Record<string, unknown>)?.requisitos_fisicos ?? null,
           cd.peligros_riesgos ?? null,
-          JSON.stringify(cd.matriz ?? {}),
           JSON.stringify(cd),
           now, now
         ).run();
@@ -143,8 +140,8 @@ profesiograma.post(
 
       await c.env.DB.prepare(`
         INSERT INTO historial_versiones
-        (id, profesiograma_id, version, snapshot_json, cambio_desc, creado_por, creado_en)
-        VALUES (?,?,1,?,'Creación inicial',?,?)
+        (id, profesiograma_id, version, snapshot_json, cambiado_por, cambio_desc, creado_en)
+        VALUES (?,?,1,?,?,'Creación inicial',?)
       `).bind(crypto.randomUUID(), profId, JSON.stringify(body), user.sub, now).run();
 
       return c.json({ success: true, id: profId }, 201);

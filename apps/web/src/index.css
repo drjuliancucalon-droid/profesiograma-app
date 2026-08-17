@@ -149,8 +149,41 @@ button {
 
 @media print {
   @page {
-    size: letter landscape;
-    margin: 8mm;
+    margin: 12mm;
+  }
+  /* Redefine las variables de color oscuras a versiones claras — arregla de una vez
+     todos los estilos en línea (badges, tarjetas) que las consumen directamente. */
+  :root {
+    --color-bg: #ffffff;
+    --color-surface: #ffffff;
+    --color-surface-2: #f3f4f6;
+    --color-border: #999999;
+    --color-text: #111111;
+    --color-text-muted: #333333;
+    --color-text-faint: #666666;
+  }
+  /* Fuerza texto oscuro sobre fondo blanco en todo el contenido impreso, sin importar
+     qué clases oscuras de Tailwind (bg-slate-900, text-slate-300, etc.) tenga cada
+     elemento — evita tener que anotar print: en cada uno individualmente. */
+  main, main * {
+    color: #111 !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  main {
+    background: #fff !important;
+  }
+  main table, main thead, main tbody, main tr {
+    background-color: #fff !important;
+  }
+  main th {
+    background-color: #e5e7eb !important;
+  }
+  main td,
+  main th {
+    border-color: #999 !important;
   }
   body {
     background: white !important;

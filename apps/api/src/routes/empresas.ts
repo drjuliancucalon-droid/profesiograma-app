@@ -19,21 +19,19 @@ empresas.get('/:id', async (c) => {
   return c.json({ success: true, data: row });
 });
 
-empresas.post('/', requireRole('admin'), async (c) => {
+empresas.post('/', requireRole('admin', 'medico'), async (c) => {
   const body = await c.req.json<{
-    nombre: string; nit?: string; logo_url?: string;
-    responsable_sg_sst?: string; correo?: string; telefono?: string; ciudad?: string;
+    nombre: string; nit?: string; logo_url?: string; responsable?: string;
   }>();
   if (!body.nombre) return c.json({ success: false, error: 'nombre requerido' }, 400);
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   await c.env.DB.prepare(`
-    INSERT INTO empresas (id,nombre,nit,logo_url,responsable_sg_sst,correo,telefono,ciudad,creado_en,actualizado_en)
-    VALUES (?,?,?,?,?,?,?,?,?,?)
+    INSERT INTO empresas (id,nombre,nit,responsable,logo_url,creado_en,actualizado_en)
+    VALUES (?,?,?,?,?,?,?)
   `).bind(
-    id, body.nombre, body.nit ?? null, body.logo_url ?? null,
-    body.responsable_sg_sst ?? null, body.correo ?? null,
-    body.telefono ?? null, body.ciudad ?? null, now, now
+    id, body.nombre, body.nit ?? null, body.responsable ?? null,
+    body.logo_url ?? null, now, now
   ).run();
   return c.json({ success: true, id }, 201);
 });
@@ -42,11 +40,10 @@ empresas.put('/:id', requireRole('admin'), async (c) => {
   const body = await c.req.json<Record<string, string>>();
   const now = new Date().toISOString();
   await c.env.DB.prepare(`
-    UPDATE empresas SET nombre=?,nit=?,logo_url=?,responsable_sg_sst=?,correo=?,telefono=?,ciudad=?,actualizado_en=? WHERE id=?
+    UPDATE empresas SET nombre=?,nit=?,responsable=?,logo_url=?,actualizado_en=? WHERE id=?
   `).bind(
-    body.nombre, body.nit ?? null, body.logo_url ?? null,
-    body.responsable_sg_sst ?? null, body.correo ?? null,
-    body.telefono ?? null, body.ciudad ?? null, now, c.req.param('id')
+    body.nombre, body.nit ?? null, body.responsable ?? null,
+    body.logo_url ?? null, now, c.req.param('id')
   ).run();
   return c.json({ success: true });
 });
