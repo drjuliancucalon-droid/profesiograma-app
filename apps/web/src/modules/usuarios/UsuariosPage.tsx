@@ -3,7 +3,7 @@ import { UserPlus, Trash2, Power, Loader2, Users } from 'lucide-react';
 import { api } from '../../shared/lib/api';
 import { useAuthStore } from '../../store/authStore';
 
-type Rol = 'admin' | 'medico' | 'rrhh';
+type Rol = 'admin' | 'medico' | 'rrhh' | 'sst';
 
 interface UserRow {
   id: string;
@@ -17,6 +17,7 @@ interface UserRow {
 const ROL_LABEL: Record<Rol, string> = {
   admin: 'Administrador',
   medico: 'Médico',
+  sst: 'Especialista SST',
   rrhh: 'RR.HH.',
 };
 
@@ -116,6 +117,7 @@ export function UsuariosPage() {
               <select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as Rol })} style={inputStyle}>
                 <option value="admin">Administrador</option>
                 <option value="medico">Médico</option>
+                <option value="sst">Especialista SST</option>
                 <option value="rrhh">RR.HH.</option>
               </select>
             </div>

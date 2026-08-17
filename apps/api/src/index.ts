@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { secureHeaders } from 'hono/secure-headers';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import authRoutes from './routes/auth';
 import profesiogramaRoutes from './routes/profesiograma';
@@ -17,6 +18,17 @@ const app = new Hono<HonoEnv>();
 
 // ── Middlewares globales ──────────────────────────────────────────
 app.use('*', logger());
+// La API solo devuelve JSON — nunca HTML — así que se bloquea todo por defecto.
+app.use('*', secureHeaders({
+  contentSecurityPolicy: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] },
+  xFrameOptions: 'DENY',
+  xContentTypeOptions: 'nosniff',
+  referrerPolicy: 'no-referrer',
+  strictTransportSecurity: 'max-age=31536000; includeSubDomains; preload',
+  // El frontend (Pages) y esta API (Workers) viven en dominios distintos
+  // (pages.dev vs workers.dev) — "same-site" los bloquearía por completo.
+  crossOriginResourcePolicy: 'cross-origin',
+}));
 app.use('*', cors({
   origin: (origin, c) => {
     const allowed = (c.env as unknown as Env).CORS_ORIGIN;

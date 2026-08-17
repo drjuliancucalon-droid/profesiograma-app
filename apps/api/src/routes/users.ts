@@ -19,7 +19,7 @@ users.get('/', requireRole('admin'), async (c) => {
 users.post('/', requireRole('admin'), async (c) => {
   const body = await c.req.json<{
     email: string; password: string; nombre: string;
-    rol: 'admin' | 'medico' | 'rrhh';
+    rol: 'admin' | 'medico' | 'rrhh' | 'sst';
   }>();
   if (!body.email || !body.password || !body.nombre || !body.rol) {
     return c.json({ success: false, error: 'Todos los campos son requeridos' }, 400);
