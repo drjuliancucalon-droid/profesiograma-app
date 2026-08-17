@@ -11,19 +11,35 @@ ordenes.use('*', requireAuth);
 ordenes.get('/', async (c) => {
   const empresaId = c.req.query('empresa_id');
   const profId    = c.req.query('profesiograma_id');
-  let q = 'SELECT * FROM ordenes_servicio WHERE 1=1';
-  const params: string[] = [];
-  if (empresaId) { q += ' AND empresa_id = ?'; params.push(empresaId); }
-  if (profId)    { q += ' AND profesiograma_id = ?'; params.push(profId); }
-  q += ' ORDER BY creado_en DESC';
-  const stmt = params.reduce((s, p) => s.bind(p), c.env.DB.prepare(q));
-  const { results } = await stmt.all();
-  return c.json({ success: true, data: results });
+
+  if (empresaId && profId) {
+    const { results } = await c.env.DB
+      .prepare('SELECT * FROM ordenes_servicio WHERE empresa_id = ? AND profesiograma_id = ? ORDER BY creado_en DESC')
+      .bind(empresaId, profId).all();
+    return c.json({ success: true, data: results });
+  } else if (empresaId) {
+    const { results } = await c.env.DB
+      .prepare('SELECT * FROM ordenes_servicio WHERE empresa_id = ? ORDER BY creado_en DESC')
+      .bind(empresaId).all();
+    return c.json({ success: true, data: results });
+  } else if (profId) {
+    const { results } = await c.env.DB
+      .prepare('SELECT * FROM ordenes_servicio WHERE profesiograma_id = ? ORDER BY creado_en DESC')
+      .bind(profId).all();
+    return c.json({ success: true, data: results });
+  } else {
+    const { results } = await c.env.DB
+      .prepare('SELECT * FROM ordenes_servicio ORDER BY creado_en DESC')
+      .all();
+    return c.json({ success: true, data: results });
+  }
 });
 
 // GET /api/ordenes/:id
 ordenes.get('/:id', async (c) => {
-  const row = await c.env.DB.prepare('SELECT * FROM ordenes_servicio WHERE id = ? LIMIT 1').bind(c.req.param('id')).first();
+  const row = await c.env.DB
+    .prepare('SELECT * FROM ordenes_servicio WHERE id = ? LIMIT 1')
+    .bind(c.req.param('id')).first();
   if (!row) return c.json({ success: false, error: 'No encontrada' }, 404);
   return c.json({ success: true, data: row });
 });
@@ -51,9 +67,9 @@ ordenes.post('/', async (c) => {
     (id, profesiograma_id, cargo_id, empresa_id, candidato_nombre, candidato_documento, momento, examenes_json, restricciones_json, estado, creado_por, creado_en, actualizado_en)
     VALUES (?,?,?,?,?,?,?,?,?,'emitida',?,?,?)
   `).bind(
-    id, body.profesiograma_id, body.cargo_id??null, body.empresa_id,
-    body.candidato_nombre??null, body.candidato_documento??null, body.momento,
-    JSON.stringify(body.examenes_json??[]), JSON.stringify(body.restricciones_json??[]),
+    id, body.profesiograma_id, body.cargo_id ?? null, body.empresa_id,
+    body.candidato_nombre ?? null, body.candidato_documento ?? null, body.momento,
+    JSON.stringify(body.examenes_json ?? []), JSON.stringify(body.restricciones_json ?? []),
     user.sub, now, now
   ).run();
   return c.json({ success: true, id }, 201);
@@ -62,10 +78,11 @@ ordenes.post('/', async (c) => {
 // PATCH /api/ordenes/:id/estado
 ordenes.patch('/:id/estado', async (c) => {
   const { estado } = await c.req.json<{ estado: string }>();
-  if (!['emitida','vigente','anulada'].includes(estado)) {
+  if (!['emitida', 'vigente', 'anulada'].includes(estado)) {
     return c.json({ success: false, error: 'Estado inválido' }, 400);
   }
-  await c.env.DB.prepare('UPDATE ordenes_servicio SET estado=?, actualizado_en=? WHERE id=?')
+  await c.env.DB
+    .prepare('UPDATE ordenes_servicio SET estado=?, actualizado_en=? WHERE id=?')
     .bind(estado, new Date().toISOString(), c.req.param('id')).run();
   return c.json({ success: true });
 });

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types/env';
 import { requireAuth } from '../middleware/auth';
-import { generateProfesiogramaPdf } from '../services/pdf.service';
+import { generateProfesiogramaPdf, generateOrdenPdf } from '../services/pdf.service';
 
 const pdf = new Hono<{ Bindings: Env }>();
 
@@ -11,7 +11,6 @@ pdf.use('*', requireAuth);
 pdf.get('/profesiogramas/:id/pdf', async (c) => {
   const id = c.req.param('id');
 
-  // Obtener profesiograma + cargos
   const prof = await c.env.DB
     .prepare('SELECT * FROM profesiogramas WHERE id = ? LIMIT 1')
     .bind(id).first<Record<string, unknown>>();
@@ -31,7 +30,6 @@ pdf.get('/profesiogramas/:id/pdf', async (c) => {
       empresa: empresa ?? {},
       cargos,
     });
-
     return new Response(pdfBytes, {
       headers: {
         'Content-Type': 'application/pdf',
@@ -48,6 +46,7 @@ pdf.get('/profesiogramas/:id/pdf', async (c) => {
 // GET /api/pdf/ordenes/:id/pdf
 pdf.get('/ordenes/:id/pdf', async (c) => {
   const id = c.req.param('id');
+
   const orden = await c.env.DB
     .prepare('SELECT * FROM ordenes_servicio WHERE id = ? LIMIT 1')
     .bind(id).first<Record<string, unknown>>();
@@ -57,30 +56,16 @@ pdf.get('/ordenes/:id/pdf', async (c) => {
     .prepare('SELECT * FROM empresas WHERE id = ? LIMIT 1')
     .bind(orden.empresa_id as string).first<Record<string, unknown>>();
 
-  // HTML minimo para la orden
-  const html = `<!DOCTYPE html><html><body style="font-family:Arial;padding:2rem">
-    <h1>Orden de Servicio</h1>
-    <p><b>Candidato:</b> ${orden.candidato_nombre ?? 'N/A'}</p>
-    <p><b>Documento:</b> ${orden.candidato_documento ?? 'N/A'}</p>
-    <p><b>Momento:</b> ${orden.momento}</p>
-    <p><b>Empresa:</b> ${(empresa?.nombre as string) ?? 'N/A'}</p>
-    <p><b>Estado:</b> ${orden.estado}</p>
-  </body></html>`;
-
   try {
-    const browser = await (c.env.BROWSER as unknown as { launch: () => Promise<{ newPage: () => Promise<{
-      setContent: (h: string, o: object) => Promise<void>;
-      pdf: (o: object) => Promise<Uint8Array>;
-      close: () => Promise<void>;
-    }> }> }).launch();
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-    const pdfBytes = await page.pdf({ format: 'A4' });
-    await page.close();
+    const pdfBytes = await generateOrdenPdf(c.env.BROWSER, {
+      orden,
+      empresa: empresa ?? {},
+    });
     return new Response(pdfBytes, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="orden-${id}.pdf"`,
+        'Content-Length': String(pdfBytes.byteLength),
       },
     });
   } catch (err) {

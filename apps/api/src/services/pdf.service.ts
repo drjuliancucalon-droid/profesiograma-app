@@ -6,16 +6,23 @@ interface PdfData {
   cargos: Array<Record<string, unknown>>;
 }
 
+interface OrdenData {
+  orden: Record<string, unknown>;
+  empresa: Record<string, unknown>;
+}
+
 const MOMENTOS = ['I', 'P', 'R', 'PI', 'RL'] as const;
 const EXAMENES = [
   'fisico', 'osteomuscular', 'psicosensometrico', 'audiometria',
   'visiometria', 'electrocardiograma', 'glicemia', 'perfillipidico',
 ] as const;
 
-function buildHtml(data: PdfData): string {
+function buildProfesiogramaHtml(data: PdfData): string {
   const { empresa, cargos } = data;
   const rows = cargos.map(cargo => {
-    const matriz = JSON.parse((cargo.matriz_json as string) ?? '{}') as Record<string, Record<string, boolean>>;
+    const matriz = JSON.parse(
+      (cargo.matriz_json as string) ?? '{}'
+    ) as Record<string, Record<string, boolean>>;
     const cells = EXAMENES.map(ex => {
       const m = matriz[ex] ?? {};
       return `<td>${MOMENTOS.map(mo => m[mo] ? `<span class="dot">${mo}</span>` : '').join('')}</td>`;
@@ -59,17 +66,58 @@ function buildHtml(data: PdfData): string {
 </html>`;
 }
 
-export async function generateProfesiogramaPdf(
+function buildOrdenHtml(data: OrdenData): string {
+  const { orden, empresa } = data;
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { font-family: Arial, sans-serif; font-size: 12px; padding: 2rem; }
+  h1 { font-size: 18px; margin-bottom: 1rem; }
+  p { margin: 0.4rem 0; }
+  b { color: #1e3a5f; }
+  @page { size: A4; margin: 20mm; }
+</style>
+</head>
+<body>
+  <h1>Orden de Servicio</h1>
+  <p><b>Candidato:</b> ${orden.candidato_nombre ?? 'N/A'}</p>
+  <p><b>Documento:</b> ${orden.candidato_documento ?? 'N/A'}</p>
+  <p><b>Momento:</b> ${orden.momento ?? 'N/A'}</p>
+  <p><b>Empresa:</b> ${(empresa.nombre as string) ?? 'N/A'}</p>
+  <p><b>Estado:</b> ${orden.estado ?? 'N/A'}</p>
+</body>
+</html>`;
+}
+
+async function pdfFromHtml(
   browser: Fetcher,
-  data: PdfData
+  html: string,
+  landscape = false
 ): Promise<ArrayBuffer> {
-  const b = await puppeteer.launch(browser);
+  const b    = await puppeteer.launch(browser);
   const page = await b.newPage();
-  await page.setContent(buildHtml(data), { waitUntil: 'networkidle0' });
-  const pdfData = await page.pdf({ format: 'A4', landscape: true, printBackground: true });
+  // 'networkidle0' no existe en @cloudflare/puppeteer — usar 'load'
+  await page.setContent(html, { waitUntil: 'load' });
+  const pdfData = await page.pdf({ format: 'A4', landscape, printBackground: true });
   await page.close();
   await b.close();
   // Uint8Array → ArrayBuffer propio (evita byteOffset != 0 en buffers compartidos)
   const arr = pdfData as unknown as Uint8Array;
   return arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength) as ArrayBuffer;
+}
+
+export async function generateProfesiogramaPdf(
+  browser: Fetcher,
+  data: PdfData
+): Promise<ArrayBuffer> {
+  return pdfFromHtml(browser, buildProfesiogramaHtml(data), true);
+}
+
+export async function generateOrdenPdf(
+  browser: Fetcher,
+  data: OrdenData
+): Promise<ArrayBuffer> {
+  return pdfFromHtml(browser, buildOrdenHtml(data), false);
 }
