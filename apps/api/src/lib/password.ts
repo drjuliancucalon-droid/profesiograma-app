@@ -14,6 +14,14 @@ export async function hashPassword(password: string): Promise<{ hash: string; sa
   return { hash, salt: saltB64, iterations: ITERATIONS };
 }
 
+const PASSWORD_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+
+/** Genera una contraseña temporal legible para entregar a un admin nuevo. */
+export function generateRandomPassword(length = 14): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(length));
+  return Array.from(bytes, (b) => PASSWORD_CHARS[b % PASSWORD_CHARS.length]).join('');
+}
+
 export async function verifyPassword(
   password: string,
   stored: { hash: string; salt: string; iterations: number }

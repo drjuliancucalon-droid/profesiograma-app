@@ -19,8 +19,9 @@ auth.post('/login', async (c) => {
     .prepare('SELECT * FROM users WHERE email = ? AND activo = 1 LIMIT 1')
     .bind(email)
     .first<{
-      id: string; email: string; nombre: string; rol: string;
+      id: string; email: string; nombre: string; rol: 'admin' | 'medico' | 'rrhh' | 'sst';
       password_hash: string; password_salt: string; password_iterations: number;
+      organizacion_id: string; es_superadmin: number;
     }>();
 
   if (!user) {
@@ -40,6 +41,7 @@ auth.post('/login', async (c) => {
 
   const accessToken = await signJwt(c.env.JWT_SECRET, {
     sub: user.id, email: user.email, rol: user.rol,
+    organizacion_id: user.organizacion_id, es_superadmin: !!user.es_superadmin,
   }, 3600);
 
   const refreshToken = crypto.randomUUID();
@@ -50,13 +52,19 @@ auth.post('/login', async (c) => {
     .bind(newId(), user.id, refreshToken, expiresAt, nowIso())
     .run();
 
-  auditLog(c, { action: 'auth.login.success', entityType: 'user', entityId: user.id, userId: user.id });
+  auditLog(c, {
+    action: 'auth.login.success', entityType: 'user', entityId: user.id, userId: user.id,
+    organizacionId: user.organizacion_id,
+  });
 
   return c.json({
     success: true,
     access_token: accessToken,
     refresh_token: refreshToken,
-    user: { id: user.id, email: user.email, nombre: user.nombre, rol: user.rol },
+    user: {
+      id: user.id, email: user.email, nombre: user.nombre, rol: user.rol,
+      es_superadmin: !!user.es_superadmin,
+    },
   });
 });
 
@@ -72,12 +80,15 @@ auth.post('/refresh', async (c) => {
 
   const session = await c.env.DB
     .prepare(`
-      SELECT s.id as session_id, s.user_id, u.email, u.rol, u.activo
+      SELECT s.id as session_id, s.user_id, u.email, u.rol, u.activo, u.organizacion_id, u.es_superadmin
       FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.refresh_token = ? AND s.revoked = 0 AND s.expires_at > datetime('now') LIMIT 1
     `)
     .bind(refresh_token)
-    .first<{ session_id: string; user_id: string; email: string; rol: string; activo: number }>();
+    .first<{
+      session_id: string; user_id: string; email: string; rol: 'admin' | 'medico' | 'rrhh' | 'sst';
+      activo: number; organizacion_id: string; es_superadmin: number;
+    }>();
 
   if (!session || !session.activo) {
     return c.json({ success: false, error: 'Sesión inválida o expirada' }, 401);
@@ -95,6 +106,7 @@ auth.post('/refresh', async (c) => {
 
   const accessToken = await signJwt(c.env.JWT_SECRET, {
     sub: session.user_id, email: session.email, rol: session.rol,
+    organizacion_id: session.organizacion_id, es_superadmin: !!session.es_superadmin,
   }, 3600);
 
   return c.json({ success: true, access_token: accessToken, refresh_token: newRefreshToken });
@@ -106,11 +118,17 @@ auth.post('/logout', async (c) => {
   if (!parsed.ok) return parsed.response;
   if (parsed.data.refresh_token) {
     const revoked = await c.env.DB
-      .prepare('UPDATE sessions SET revoked = 1 WHERE refresh_token = ? RETURNING user_id')
+      .prepare(`
+        UPDATE sessions SET revoked = 1 WHERE refresh_token = ?
+        RETURNING user_id, (SELECT organizacion_id FROM users WHERE id = sessions.user_id) as organizacion_id
+      `)
       .bind(parsed.data.refresh_token)
-      .first<{ user_id: string }>();
+      .first<{ user_id: string; organizacion_id: string }>();
     if (revoked) {
-      auditLog(c, { action: 'auth.logout', entityType: 'user', entityId: revoked.user_id, userId: revoked.user_id });
+      auditLog(c, {
+        action: 'auth.logout', entityType: 'user', entityId: revoked.user_id, userId: revoked.user_id,
+        organizacionId: revoked.organizacion_id,
+      });
     }
   }
   return c.json({ success: true, message: 'Sesión cerrada' });
@@ -123,9 +141,9 @@ auth.get('/me', async (c) => {
   const payload = await verifyJwt(c.env.JWT_SECRET, header.slice(7));
   if (!payload) return c.json({ success: false, error: 'Token inválido' }, 401);
   const user = await c.env.DB
-    .prepare('SELECT id, email, nombre, rol FROM users WHERE id = ? LIMIT 1')
+    .prepare('SELECT id, email, nombre, rol, organizacion_id, es_superadmin FROM users WHERE id = ? LIMIT 1')
     .bind(payload.sub as string)
-    .first<{ id: string; email: string; nombre: string; rol: string }>();
+    .first<{ id: string; email: string; nombre: string; rol: string; organizacion_id: string; es_superadmin: number }>();
   if (!user) return c.json({ success: false, error: 'Usuario no encontrado' }, 404);
   return c.json({ success: true, user });
 });

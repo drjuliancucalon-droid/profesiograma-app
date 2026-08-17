@@ -19,9 +19,10 @@ async function tryDecrypt(value: string | undefined, encryptionKey: string): Pro
   }
 }
 
-export async function getAiKeys(db: D1Database, env: Env): Promise<AiKeys> {
+export async function getAiKeys(db: D1Database, env: Env, organizacionId: string): Promise<AiKeys> {
   const { results } = await db
-    .prepare("SELECT key, value FROM settings WHERE key IN ('gemini_api_key','openrouter_api_key','mistral_api_key')")
+    .prepare("SELECT key, value FROM settings WHERE organizacion_id = ? AND key IN ('gemini_api_key','openrouter_api_key','mistral_api_key')")
+    .bind(organizacionId)
     .all<{ key: string; value: string }>();
   const stored = Object.fromEntries(results.map((r) => [r.key, r.value]));
   const [gemini, openrouter, mistral] = await Promise.all([
@@ -36,8 +37,11 @@ export async function getAiKeys(db: D1Database, env: Env): Promise<AiKeys> {
   };
 }
 
-export async function getPrimaryProvider(db: D1Database): Promise<AiProvider> {
-  const row = await db.prepare("SELECT value FROM settings WHERE key = 'ai_primary_provider' LIMIT 1").first<{ value: string }>();
+export async function getPrimaryProvider(db: D1Database, organizacionId: string): Promise<AiProvider> {
+  const row = await db
+    .prepare("SELECT value FROM settings WHERE organizacion_id = ? AND key = 'ai_primary_provider' LIMIT 1")
+    .bind(organizacionId)
+    .first<{ value: string }>();
   const value = row?.value;
   if (value === 'gemini' || value === 'openrouter' || value === 'mistral') return value;
   return 'gemini';

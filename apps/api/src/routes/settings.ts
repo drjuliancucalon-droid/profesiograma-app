@@ -5,6 +5,7 @@ import { encrypt, decrypt } from '../lib/crypto';
 import { parseBody } from '../lib/validate';
 import { aiKeysSchema } from '../lib/schemas';
 import { auditLog } from '../lib/audit';
+import { orgId } from '../lib/org';
 
 const settings = new Hono<HonoEnv>();
 
@@ -28,8 +29,10 @@ function mask(value?: string): string | null {
 
 // GET /api/settings/ai-keys — nunca devuelve las keys completas, solo si están configuradas
 settings.get('/ai-keys', async (c) => {
+  const org = orgId(c);
   const { results } = await c.env.DB
-    .prepare("SELECT key, value FROM settings WHERE key IN ('gemini_api_key','openrouter_api_key','mistral_api_key','ai_primary_provider')")
+    .prepare("SELECT key, value FROM settings WHERE organizacion_id = ? AND key IN ('gemini_api_key','openrouter_api_key','mistral_api_key','ai_primary_provider')")
+    .bind(org)
     .all<{ key: string; value: string }>();
   const stored = Object.fromEntries(results.map((r) => [r.key, r.value]));
   const [gemini, openrouter, mistral] = await Promise.all([
@@ -55,12 +58,13 @@ settings.put('/ai-keys', async (c) => {
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
   const user = c.get('user');
+  const org = orgId(c);
   const now = new Date().toISOString();
 
   const upsert = async (key: string, value: string) => {
     await c.env.DB
-      .prepare('INSERT INTO settings (key, value, actualizado_por, actualizado_en) VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, actualizado_por=excluded.actualizado_por, actualizado_en=excluded.actualizado_en')
-      .bind(key, value, user.sub, now)
+      .prepare('INSERT INTO settings (organizacion_id, key, value, actualizado_por, actualizado_en) VALUES (?,?,?,?,?) ON CONFLICT(organizacion_id, key) DO UPDATE SET value=excluded.value, actualizado_por=excluded.actualizado_por, actualizado_en=excluded.actualizado_en')
+      .bind(org, key, value, user.sub, now)
       .run();
   };
 
@@ -82,7 +86,8 @@ settings.put('/ai-keys', async (c) => {
 // disponibles para la key configurada (temporal, para depurar límites de cuota por modelo).
 settings.get('/gemini-models', async (c) => {
   const row = await c.env.DB
-    .prepare("SELECT value FROM settings WHERE key = 'gemini_api_key' LIMIT 1")
+    .prepare("SELECT value FROM settings WHERE organizacion_id = ? AND key = 'gemini_api_key' LIMIT 1")
+    .bind(orgId(c))
     .first<{ value: string }>();
   const key = (await decryptSafe(row?.value, c.env.ENCRYPTION_KEY)) || c.env.GEMINI_API_KEY;
   if (!key) return c.json({ success: false, error: 'No hay GEMINI_API_KEY configurada' }, 400);

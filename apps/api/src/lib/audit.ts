@@ -6,6 +6,7 @@ export async function audit(
   env: Env,
   opts: {
     userId?: string;
+    organizacionId?: string;
     action: string;
     entityType: string;
     entityId?: string;
@@ -16,10 +17,11 @@ export async function audit(
   // La tabla real en D1 usa nombres en español y no coincide con la migración
   // 0003 del repo (columnas action/entity_type/entity_id/metadata_json que
   // nunca se aplicaron así en producción): el esquema vivo es
-  // (id, user_id, accion, entidad, entidad_id, detalle, ip, creado_en).
+  // (id, user_id, accion, entidad, entidad_id, detalle, ip, creado_en,
+  // organizacion_id — agregada en la migración 0007).
   await env.DB.prepare(
-    `INSERT INTO audit_log (id, user_id, accion, entidad, entidad_id, detalle, ip, creado_en)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
+    `INSERT INTO audit_log (id, user_id, accion, entidad, entidad_id, detalle, ip, creado_en, organizacion_id)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`
   )
     .bind(
       newId(),
@@ -29,7 +31,8 @@ export async function audit(
       opts.entityId ?? null,
       opts.metadata ? JSON.stringify(opts.metadata) : null,
       opts.ip ?? null,
-      nowIso()
+      nowIso(),
+      opts.organizacionId ?? null
     )
     .run();
 }
@@ -43,6 +46,7 @@ export function auditLog(
   c: Context<HonoEnv>,
   opts: {
     userId?: string;
+    organizacionId?: string;
     action: string;
     entityType: string;
     entityId?: string;
@@ -50,8 +54,12 @@ export function auditLog(
   }
 ): void {
   const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? undefined;
+  // organizacion_id: se usa el que venga explícito (necesario en /auth/login
+  // y /auth/refresh, donde requireAuth no ha corrido todavía y c.get('user')
+  // no existe); si no se pasa, se toma del usuario ya autenticado en contexto.
+  const organizacionId = opts.organizacionId ?? c.get('user')?.organizacion_id;
   c.executionCtx.waitUntil(
-    audit(c.env, { ...opts, ip }).catch((err) => {
+    audit(c.env, { ...opts, ip, organizacionId }).catch((err) => {
       console.error('audit_log write failed', err);
     })
   );

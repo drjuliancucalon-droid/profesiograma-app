@@ -65,6 +65,13 @@ export const profesiogramaCreateSchema = z.object({
   cargos_data: z.array(z.record(z.string(), z.unknown())).min(1, 'cargos_data no puede estar vacío'),
 });
 
+// --- organizaciones (solo superadmin) ---
+export const createOrgSchema = z.object({
+  nombre_organizacion: z.string().trim().min(1, 'nombre de la organización requerido').max(300),
+  admin_email: z.string().trim().email('email inválido'),
+  admin_nombre: z.string().trim().min(1, 'nombre del admin requerido').max(300),
+});
+
 // --- settings ---
 export const aiKeysSchema = z.object({
   gemini_api_key: z.string().trim().min(1).max(500).optional(),

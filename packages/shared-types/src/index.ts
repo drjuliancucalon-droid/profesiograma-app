@@ -7,9 +7,8 @@ export interface User {
   id: string;
   email: string;
   nombre: string;
-  rol: 'admin' | 'medico' | 'sst_empresa' | 'rrhh';
-  empresa_id?: string;
-  created_at: string;
+  rol: 'admin' | 'medico' | 'rrhh' | 'sst';
+  es_superadmin?: boolean;
 }
 
 export interface AuthResponse {

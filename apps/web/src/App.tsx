@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Building2, BrainCircuit, ClipboardList, History, LogOut, ShieldCheck, FileText, Settings, Users } from 'lucide-react';
+import { LayoutDashboard, Building2, BrainCircuit, ClipboardList, History, LogOut, ShieldCheck, FileText, Settings, Users, Building } from 'lucide-react';
 import { useAuthStore } from './store/authStore';
 import { LoginPage } from './modules/auth/LoginPage';
 import { DashboardPage } from './modules/dashboard/DashboardPage';
@@ -10,12 +10,14 @@ import { ProfesiogramaGeneratorPage } from './modules/profesiograma/Profesiogram
 import { InformePage } from './modules/informe/InformePage';
 import { SettingsPage } from './modules/settings/SettingsPage';
 import { UsuariosPage } from './modules/usuarios/UsuariosPage';
+import { OrganizacionesPage } from './modules/organizaciones/OrganizacionesPage';
 
-function ProtectedRoute({ children, adminOnly }: { children: React.ReactNode; adminOnly?: boolean }) {
+function ProtectedRoute({ children, adminOnly, superadminOnly }: { children: React.ReactNode; adminOnly?: boolean; superadminOnly?: boolean }) {
   const { token, user } = useAuthStore();
   const location = useLocation();
   if (!token) return <Navigate to="/login" state={{ from: location }} replace />;
   if (adminOnly && user?.rol !== 'admin') return <Navigate to="/dashboard" replace />;
+  if (superadminOnly && !user?.es_superadmin) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
@@ -31,9 +33,12 @@ const NAV_ITEMS = [
 function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { user, logout } = useAuthStore();
-  const navItems = user?.rol === 'admin'
+  let navItems = user?.rol === 'admin'
     ? [...NAV_ITEMS, { to: '/usuarios', label: 'Usuarios', icon: Users }, { to: '/settings', label: 'Ajustes', icon: Settings }]
     : NAV_ITEMS;
+  if (user?.es_superadmin) {
+    navItems = [...navItems, { to: '/organizaciones', label: 'Organizaciones', icon: Building }];
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100dvh', background: 'var(--color-bg)' }}>
@@ -179,6 +184,16 @@ export function App() {
           <ProtectedRoute adminOnly>
             <Layout>
               <UsuariosPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/organizaciones"
+        element={
+          <ProtectedRoute superadminOnly>
+            <Layout>
+              <OrganizacionesPage />
             </Layout>
           </ProtectedRoute>
         }

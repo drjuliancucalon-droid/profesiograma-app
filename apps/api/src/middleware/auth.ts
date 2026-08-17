@@ -28,6 +28,20 @@ export function requireRole(...roles: Role[]): MiddlewareHandler<HonoEnv> {
 }
 
 /**
+ * Verifica que el usuario sea superadmin de la plataforma (no de una
+ * organización) después de requireAuth. Es una capacidad aparte del rol
+ * normal: un superadmin sigue siendo admin/medico/etc. dentro de su propia
+ * organización, pero además puede crear organizaciones nuevas.
+ */
+export const requireSuperadmin: MiddlewareHandler<HonoEnv> = async (c, next) => {
+  const user = c.get('user');
+  if (!user || !user.es_superadmin) {
+    return c.json({ success: false, error: 'Sin permisos suficientes' }, 403);
+  }
+  await next();
+};
+
+/**
  * authMiddleware — alias legacy compatible.
  * Si se pasan roles, verifica JWT + rol. Sin roles, solo verifica JWT.
  */

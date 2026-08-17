@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { HonoEnv } from '../types/env';
 import { requireAuth } from '../middleware/auth';
 import { generateProfesiogramaPdf, generateOrdenPdf } from '../services/pdf.service';
+import { orgId } from '../lib/org';
 
 const pdf = new Hono<HonoEnv>();
 
@@ -12,8 +13,8 @@ pdf.get('/profesiogramas/:id/pdf', async (c) => {
   const id = c.req.param('id');
 
   const prof = await c.env.DB
-    .prepare('SELECT * FROM profesiogramas WHERE id = ? LIMIT 1')
-    .bind(id).first<Record<string, unknown>>();
+    .prepare('SELECT * FROM profesiogramas WHERE id = ? AND organizacion_id = ? LIMIT 1')
+    .bind(id, orgId(c)).first<Record<string, unknown>>();
   if (!prof) return c.json({ success: false, error: 'Profesiograma no encontrado' }, 404);
 
   const empresa = await c.env.DB
@@ -61,8 +62,8 @@ pdf.get('/ordenes/:id/pdf', async (c) => {
   const id = c.req.param('id');
 
   const orden = await c.env.DB
-    .prepare('SELECT * FROM ordenes_servicio WHERE id = ? LIMIT 1')
-    .bind(id).first<Record<string, unknown>>();
+    .prepare('SELECT * FROM ordenes_servicio WHERE id = ? AND organizacion_id = ? LIMIT 1')
+    .bind(id, orgId(c)).first<Record<string, unknown>>();
   if (!orden) return c.json({ success: false, error: 'Orden no encontrada' }, 404);
 
   const empresa = await c.env.DB

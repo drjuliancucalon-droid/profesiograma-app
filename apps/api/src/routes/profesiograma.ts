@@ -6,6 +6,7 @@ import { getAiKeys, getPrimaryProvider, providerOrder } from '../lib/settings';
 import { parseBody } from '../lib/validate';
 import { profesiogramaGenerateSchema, profesiogramaCreateSchema } from '../lib/schemas';
 import { auditLog } from '../lib/audit';
+import { orgId } from '../lib/org';
 
 const profesiograma = new Hono<HonoEnv>();
 
@@ -70,9 +71,10 @@ profesiograma.post(
     if (!parsed.ok) return parsed.response;
     const { cargo } = parsed.data;
     try {
+      const org = orgId(c);
       const [keys, primary] = await Promise.all([
-        getAiKeys(c.env.DB, c.env),
-        getPrimaryProvider(c.env.DB),
+        getAiKeys(c.env.DB, c.env, org),
+        getPrimaryProvider(c.env.DB, org),
       ]);
       const { text } = await generateWithFallback(
         keys,
@@ -97,19 +99,34 @@ profesiograma.post(
   requireRole('admin', 'medico'),
   async (c) => {
     const user = c.get('user');
+    const org = orgId(c);
     const parsed = await parseBody(c, profesiogramaCreateSchema);
     if (!parsed.ok) return parsed.response;
     const body = parsed.data;
     const { empresa_id, profesional_id, cargos_data } = body;
+
+    // empresa_id y profesional_id deben pertenecer a la misma organización
+    // del solicitante — si no, alguien podría crear un profesiograma
+    // apuntando a datos de otra organización adivinando o probando ids.
+    const empresaOk = await c.env.DB
+      .prepare('SELECT id FROM empresas WHERE id = ? AND organizacion_id = ? LIMIT 1')
+      .bind(empresa_id, org).first();
+    const profesionalOk = await c.env.DB
+      .prepare('SELECT id FROM profesionales WHERE id = ? AND organizacion_id = ? LIMIT 1')
+      .bind(profesional_id, org).first();
+    if (!empresaOk || !profesionalOk) {
+      return c.json({ success: false, error: 'empresa_id o profesional_id inválidos' }, 400);
+    }
+
     try {
       const profId = crypto.randomUUID();
       const now = new Date().toISOString();
       await c.env.DB.prepare(`
         INSERT INTO profesiogramas
-        (id, empresa_id, profesional_id, fecha_emision, version, estado, creado_por, creado_en, actualizado_en)
-        VALUES (?,?,?,?,1,'borrador',?,?,?)
+        (id, organizacion_id, empresa_id, profesional_id, fecha_emision, version, estado, creado_por, creado_en, actualizado_en)
+        VALUES (?,?,?,?,?,1,'borrador',?,?,?)
       `).bind(
-        profId, empresa_id, profesional_id,
+        profId, org, empresa_id, profesional_id,
         body.fecha_emision ?? now.slice(0, 10),
         user.sub, now, now
       ).run();
@@ -119,11 +136,11 @@ profesiograma.post(
         const cargoId = crypto.randomUUID();
         await c.env.DB.prepare(`
           INSERT INTO cargos
-          (id, profesiograma_id, grupo_ocupacional, nombre_cargo, descripcion,
+          (id, organizacion_id, profesiograma_id, grupo_ocupacional, nombre_cargo, descripcion,
            competencias, requisitos_fisicos, peligros_riesgos, ia_raw_json, creado_en, actualizado_en)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
         `).bind(
-          cargoId, profId,
+          cargoId, org, profId,
           cd.grupo_ocupacional ?? 'General',
           cd.cargo ?? '',
           (cd.perfil_cargo as Record<string, unknown>)?.descripcion ?? null,
@@ -138,9 +155,9 @@ profesiograma.post(
 
       await c.env.DB.prepare(`
         INSERT INTO historial_versiones
-        (id, profesiograma_id, version, snapshot_json, cambiado_por, cambio_desc, creado_en)
-        VALUES (?,?,1,?,?,'Creación inicial',?)
-      `).bind(crypto.randomUUID(), profId, JSON.stringify(body), user.sub, now).run();
+        (id, organizacion_id, profesiograma_id, version, snapshot_json, cambiado_por, cambio_desc, creado_en)
+        VALUES (?,?,?,1,?,?,'Creación inicial',?)
+      `).bind(crypto.randomUUID(), org, profId, JSON.stringify(body), user.sub, now).run();
 
       auditLog(c, {
         action: 'profesiograma.create', entityType: 'profesiograma', entityId: profId, userId: user.sub,
@@ -158,22 +175,24 @@ profesiograma.post(
 // GET /api/profesiograma — lista todos, o filtra por empresa_id si se indica
 profesiograma.get('/', requireAuth, async (c) => {
   const empresaId = c.req.query('empresa_id');
+  const org = orgId(c);
   const { results } = empresaId
     ? await c.env.DB
-        .prepare('SELECT p.*, e.nombre AS empresa_nombre FROM profesiogramas p LEFT JOIN empresas e ON e.id = p.empresa_id WHERE p.empresa_id = ? ORDER BY p.creado_en DESC')
-        .bind(empresaId).all()
+        .prepare('SELECT p.*, e.nombre AS empresa_nombre FROM profesiogramas p LEFT JOIN empresas e ON e.id = p.empresa_id WHERE p.organizacion_id = ? AND p.empresa_id = ? ORDER BY p.creado_en DESC')
+        .bind(org, empresaId).all()
     : await c.env.DB
-        .prepare('SELECT p.*, e.nombre AS empresa_nombre FROM profesiogramas p LEFT JOIN empresas e ON e.id = p.empresa_id ORDER BY p.creado_en DESC')
-        .all();
+        .prepare('SELECT p.*, e.nombre AS empresa_nombre FROM profesiogramas p LEFT JOIN empresas e ON e.id = p.empresa_id WHERE p.organizacion_id = ? ORDER BY p.creado_en DESC')
+        .bind(org).all();
   return c.json({ success: true, data: results });
 });
 
 // GET /api/profesiograma/:id
 profesiograma.get('/:id', requireAuth, async (c) => {
   const id = c.req.param('id');
+  const org = orgId(c);
   const row = await c.env.DB
-    .prepare('SELECT * FROM profesiogramas WHERE id = ? LIMIT 1')
-    .bind(id).first<Record<string, unknown>>();
+    .prepare('SELECT * FROM profesiogramas WHERE id = ? AND organizacion_id = ? LIMIT 1')
+    .bind(id, org).first<Record<string, unknown>>();
   if (!row) return c.json({ success: false, error: 'No encontrado' }, 404);
   const { results: cargos } = await c.env.DB
     .prepare('SELECT * FROM cargos WHERE profesiograma_id = ? ORDER BY creado_en')
