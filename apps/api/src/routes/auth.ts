@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
-import type { Env } from '../types/env';
+import type { HonoEnv } from '../types/env';
 import { signJwt, verifyJwt } from '../lib/jwt';
 import { hashPassword, verifyPassword } from '../lib/password';
 import { newId, nowIso } from '../lib/id';
 
-const auth = new Hono<{ Bindings: Env }>();
+const auth = new Hono<HonoEnv>();
 
 // POST /api/auth/login
 auth.post('/login', async (c) => {
@@ -18,13 +18,8 @@ auth.post('/login', async (c) => {
     .prepare('SELECT * FROM users WHERE email = ? AND activo = 1 LIMIT 1')
     .bind(email)
     .first<{
-      id: string;
-      email: string;
-      full_name: string;
-      rol: string;
-      password_hash: string;
-      salt: string;
-      iterations: number;
+      id: string; email: string; full_name: string; rol: string;
+      password_hash: string; salt: string; iterations: number;
     }>();
 
   if (!user) return c.json({ success: false, error: 'Credenciales inválidas' }, 401);
@@ -37,9 +32,7 @@ auth.post('/login', async (c) => {
   if (!valid) return c.json({ success: false, error: 'Credenciales inválidas' }, 401);
 
   const accessToken = await signJwt(c.env.JWT_SECRET, {
-    sub: user.id,
-    email: user.email,
-    rol: user.rol,
+    sub: user.id, email: user.email, rol: user.rol,
   }, 3600);
 
   const refreshToken = crypto.randomUUID();
@@ -67,10 +60,8 @@ auth.post('/refresh', async (c) => {
   const session = await c.env.DB
     .prepare(`
       SELECT s.*, u.email, u.rol, u.activo
-      FROM sessions s
-      JOIN users u ON u.id = s.user_id
-      WHERE s.token = ? AND s.expires_at > datetime('now')
-      LIMIT 1
+      FROM sessions s JOIN users u ON u.id = s.user_id
+      WHERE s.token = ? AND s.expires_at > datetime('now') LIMIT 1
     `)
     .bind(refresh_token)
     .first<{ user_id: string; email: string; rol: string; activo: number }>();
@@ -80,9 +71,7 @@ auth.post('/refresh', async (c) => {
   }
 
   const accessToken = await signJwt(c.env.JWT_SECRET, {
-    sub: session.user_id,
-    email: session.email,
-    rol: session.rol,
+    sub: session.user_id, email: session.email, rol: session.rol,
   }, 3600);
 
   return c.json({ success: true, access_token: accessToken });
@@ -91,27 +80,25 @@ auth.post('/refresh', async (c) => {
 // POST /api/auth/logout
 auth.post('/logout', async (c) => {
   const body = await c.req.json<{ refresh_token?: string }>();
-  const { refresh_token } = body;
-  if (refresh_token) {
-    await c.env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(refresh_token).run();
+  if (body.refresh_token) {
+    await c.env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(body.refresh_token).run();
   }
   return c.json({ success: true, message: 'Sesión cerrada' });
 });
 
-// GET /api/auth/me — devuelve usuario autenticado
+// GET /api/auth/me
 auth.get('/me', async (c) => {
   const header = c.req.header('Authorization');
   if (!header?.startsWith('Bearer ')) return c.json({ success: false, error: 'No autorizado' }, 401);
   const payload = await verifyJwt(c.env.JWT_SECRET, header.slice(7));
   if (!payload) return c.json({ success: false, error: 'Token inválido' }, 401);
-  const sub = payload.sub as string;
   const user = await c.env.DB
     .prepare('SELECT id, email, full_name, rol FROM users WHERE id = ? LIMIT 1')
-    .bind(sub)
+    .bind(payload.sub as string)
     .first<{ id: string; email: string; full_name: string; rol: string }>();
   if (!user) return c.json({ success: false, error: 'Usuario no encontrado' }, 404);
   return c.json({ success: true, user });
 });
 
-export { hashPassword, newId }; // para seed
+export { hashPassword, newId };
 export default auth;

@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
-import type { Env } from '../types/env';
+import type { HonoEnv } from '../types/env';
 import { requireAuth } from '../middleware/auth';
 import { generateProfesiogramaPdf, generateOrdenPdf } from '../services/pdf.service';
 
-const pdf = new Hono<{ Bindings: Env }>();
+const pdf = new Hono<HonoEnv>();
 
 pdf.use('*', requireAuth);
 

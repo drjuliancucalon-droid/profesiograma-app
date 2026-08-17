@@ -1,8 +1,7 @@
 import { Hono } from 'hono';
-import type { Env } from '../types/env';
+import type { HonoEnv } from '../types/env';
 import { requireAuth } from '../middleware/auth';
 
-type HonoEnv = { Bindings: Env; Variables: { user: { sub: string; email: string; rol: string } } };
 const ordenes = new Hono<HonoEnv>();
 
 ordenes.use('*', requireAuth);
@@ -64,12 +63,14 @@ ordenes.post('/', async (c) => {
   const now = new Date().toISOString();
   await c.env.DB.prepare(`
     INSERT INTO ordenes_servicio
-    (id, profesiograma_id, cargo_id, empresa_id, candidato_nombre, candidato_documento, momento, examenes_json, restricciones_json, estado, creado_por, creado_en, actualizado_en)
+    (id, profesiograma_id, cargo_id, empresa_id, candidato_nombre, candidato_documento,
+     momento, examenes_json, restricciones_json, estado, creado_por, creado_en, actualizado_en)
     VALUES (?,?,?,?,?,?,?,?,?,'emitida',?,?,?)
   `).bind(
     id, body.profesiograma_id, body.cargo_id ?? null, body.empresa_id,
     body.candidato_nombre ?? null, body.candidato_documento ?? null, body.momento,
-    JSON.stringify(body.examenes_json ?? []), JSON.stringify(body.restricciones_json ?? []),
+    JSON.stringify(body.examenes_json ?? []),
+    JSON.stringify(body.restricciones_json ?? []),
     user.sub, now, now
   ).run();
   return c.json({ success: true, id }, 201);

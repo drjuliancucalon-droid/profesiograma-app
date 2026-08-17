@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
-import type { Env } from '../types/env';
+import type { HonoEnv } from '../types/env';
 import { requireAuth } from '../middleware/auth';
 
-const historial = new Hono<{ Bindings: Env }>();
+const historial = new Hono<HonoEnv>();
 
 historial.use('*', requireAuth);
 

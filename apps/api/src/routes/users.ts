@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
-import type { Env } from '../types/env';
+import type { HonoEnv } from '../types/env';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { hashPassword } from '../lib/password';
 
-const users = new Hono<{ Bindings: Env }>();
+const users = new Hono<HonoEnv>();
 
 users.use('*', requireAuth);
 
@@ -18,9 +18,7 @@ users.get('/', requireRole('admin'), async (c) => {
 // POST /api/users
 users.post('/', requireRole('admin'), async (c) => {
   const body = await c.req.json<{
-    email: string;
-    password: string;
-    full_name: string;
+    email: string; password: string; full_name: string;
     rol: 'admin' | 'medico' | 'rrhh';
   }>();
   if (!body.email || !body.password || !body.full_name || !body.rol) {
@@ -44,7 +42,9 @@ users.post('/', requireRole('admin'), async (c) => {
 // PATCH /api/users/:id/toggle
 users.patch('/:id/toggle', requireRole('admin'), async (c) => {
   const id = c.req.param('id');
-  const user = await c.env.DB.prepare('SELECT activo FROM users WHERE id = ? LIMIT 1').bind(id).first<{ activo: number }>();
+  const user = await c.env.DB
+    .prepare('SELECT activo FROM users WHERE id = ? LIMIT 1')
+    .bind(id).first<{ activo: number }>();
   if (!user) return c.json({ success: false, error: 'Usuario no encontrado' }, 404);
   await c.env.DB.prepare('UPDATE users SET activo = ?, actualizado_en = ? WHERE id = ?')
     .bind(user.activo ? 0 : 1, new Date().toISOString(), id).run();
