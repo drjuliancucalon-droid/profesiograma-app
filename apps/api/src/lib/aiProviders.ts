@@ -6,18 +6,27 @@ export interface AiKeys {
   mistral?: string;
 }
 
+function extractErrorMessage(status: number, body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: string } };
+    if (parsed.error?.message) return parsed.error.message;
+  } catch {
+    // body no era JSON, usar tal cual
+  }
+  return body || `HTTP ${status}`;
+}
+
+/** Reintenta solo errores transitorios (5xx). Un 429 (cuota) no se reintenta: solo desperdicia
+ *  las pocas peticiones por minuto que suelen tener los planes gratuitos. */
 async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
   let delay = 1000;
   for (let i = 0; i < maxRetries; i++) {
-    try {
-      const response = await fetch(url, options);
-      if (response.ok) return response;
-      if (i === maxRetries - 1) {
-        const errText = await response.text();
-        throw new Error(`HTTP ${response.status} - ${errText}`);
-      }
-    } catch (err) {
-      if (i === maxRetries - 1) throw err;
+    const response = await fetch(url, options);
+    if (response.ok) return response;
+
+    const errText = await response.text();
+    if (response.status === 429 || response.status < 500 || i === maxRetries - 1) {
+      throw new Error(extractErrorMessage(response.status, errText));
     }
     await new Promise((res) => setTimeout(res, delay));
     delay *= 2;

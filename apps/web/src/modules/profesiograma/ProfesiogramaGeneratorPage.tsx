@@ -30,41 +30,59 @@ export function ProfesiogramaGeneratorPage() {
     setLoading(true);
     setError(null);
     const results: CargoProfesiograma[] = [];
+    let quotaHit = false;
 
-    for (const job of jobsList) {
+    for (const [i, job] of jobsList.entries()) {
       const existing = generatedData.find(d => d.cargo === job && d.grupo_ocupacional !== 'Revisión Manual');
       if (existing) { results.push(existing); continue; }
+
+      if (quotaHit) {
+        results.push(buildErrorCargo(job, 'No se intentó: se alcanzó el límite de solicitudes por minuto del proveedor de IA. Vuelve a generar en unos minutos.'));
+        continue;
+      }
+
+      if (i > 0) await new Promise((r) => setTimeout(r, 1500));
+
       const res = await api.post<{ success: boolean; data?: CargoProfesiograma; error?: string }>('/profesiograma/generate', { cargo: job });
       if (res.success && res.data) {
         results.push(res.data);
       } else {
-        results.push({
-          grupo_ocupacional: 'Revisión Manual',
-          cargo: job,
-          perfil_cargo: { descripcion: res.error ?? 'Error de IA en este cargo. Edita manualmente o re-analiza.', competencias: '', requisitos_fisicos: '' },
-          peligros_riesgos: 'Revisar',
-          matriz: {
-            fisico: { I: true, P: false, R: false, PI: false, RL: false },
-            osteomuscular: { I: true, P: false, R: false, PI: false, RL: false },
-            psicosensometrico: { I: false, P: false, R: false, PI: false, RL: false },
-            audiometria: { I: false, P: false, R: false, PI: false, RL: false },
-            visiometria: { I: false, P: false, R: false, PI: false, RL: false },
-            electrocardiograma: { I: false, P: false, R: false, PI: false, RL: false },
-            glicemia: { I: false, P: false, R: false, PI: false, RL: false },
-            perfil_lipidico: { I: false, P: false, R: false, PI: false, RL: false },
-            laboratorio: '',
-          },
-          matriz_observaciones: {},
-          fundamentacion_tecnica: { por_que_momentos: 'Error de análisis IA. Intenta con el botón Re-analizar.', obligatorios: [], electivos: [] },
-          recomendaciones_restricciones: [],
-        });
+        if (res.error && /quota|429|RESOURCE_EXHAUSTED/i.test(res.error)) quotaHit = true;
+        results.push(buildErrorCargo(job, res.error ?? 'Error de IA en este cargo. Edita manualmente o vuelve a generar.'));
       }
     }
     setGeneratedData(results);
     setLoading(false);
-    showNotif('success', `Profesiograma generado: ${results.length} cargos`);
+    if (quotaHit) {
+      showNotif('error', 'Se alcanzó el límite de solicitudes del proveedor de IA. Algunos cargos no se generaron — revisa Ajustes o intenta de nuevo en unos minutos.');
+    } else {
+      showNotif('success', `Profesiograma generado: ${results.length} cargos`);
+    }
     navigate('/informe');
   };
+
+  function buildErrorCargo(job: string, motivo: string): CargoProfesiograma {
+    return {
+      grupo_ocupacional: 'Revisión Manual',
+      cargo: job,
+      perfil_cargo: { descripcion: motivo, competencias: '', requisitos_fisicos: '' },
+      peligros_riesgos: 'Revisar',
+      matriz: {
+        fisico: { I: true, P: false, R: false, PI: false, RL: false },
+        osteomuscular: { I: true, P: false, R: false, PI: false, RL: false },
+        psicosensometrico: { I: false, P: false, R: false, PI: false, RL: false },
+        audiometria: { I: false, P: false, R: false, PI: false, RL: false },
+        visiometria: { I: false, P: false, R: false, PI: false, RL: false },
+        electrocardiograma: { I: false, P: false, R: false, PI: false, RL: false },
+        glicemia: { I: false, P: false, R: false, PI: false, RL: false },
+        perfil_lipidico: { I: false, P: false, R: false, PI: false, RL: false },
+        laboratorio: '',
+      },
+      matriz_observaciones: {},
+      fundamentacion_tecnica: { por_que_momentos: 'Vuelve a hacer clic en "Generar Profesiograma" para reintentar este cargo.', obligatorios: [], electivos: [] },
+      recomendaciones_restricciones: [],
+    };
+  }
 
   return (
     <div>
