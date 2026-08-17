@@ -6,6 +6,13 @@ const ordenes = new Hono<HonoEnv>();
 
 ordenes.use('*', requireAuth);
 
+const LIST_QUERY = `
+  SELECT o.*, e.nombre AS empresa_nombre, c.nombre_cargo AS cargo_nombre
+  FROM ordenes_servicio o
+  LEFT JOIN empresas e ON e.id = o.empresa_id
+  LEFT JOIN cargos c ON c.id = o.cargo_id
+`;
+
 // GET /api/ordenes
 ordenes.get('/', async (c) => {
   const empresaId = c.req.query('empresa_id');
@@ -13,22 +20,22 @@ ordenes.get('/', async (c) => {
 
   if (empresaId && profId) {
     const { results } = await c.env.DB
-      .prepare('SELECT * FROM ordenes_servicio WHERE empresa_id = ? AND profesiograma_id = ? ORDER BY creado_en DESC')
+      .prepare(`${LIST_QUERY} WHERE o.empresa_id = ? AND o.profesiograma_id = ? ORDER BY o.creado_en DESC`)
       .bind(empresaId, profId).all();
     return c.json({ success: true, data: results });
   } else if (empresaId) {
     const { results } = await c.env.DB
-      .prepare('SELECT * FROM ordenes_servicio WHERE empresa_id = ? ORDER BY creado_en DESC')
+      .prepare(`${LIST_QUERY} WHERE o.empresa_id = ? ORDER BY o.creado_en DESC`)
       .bind(empresaId).all();
     return c.json({ success: true, data: results });
   } else if (profId) {
     const { results } = await c.env.DB
-      .prepare('SELECT * FROM ordenes_servicio WHERE profesiograma_id = ? ORDER BY creado_en DESC')
+      .prepare(`${LIST_QUERY} WHERE o.profesiograma_id = ? ORDER BY o.creado_en DESC`)
       .bind(profId).all();
     return c.json({ success: true, data: results });
   } else {
     const { results } = await c.env.DB
-      .prepare('SELECT * FROM ordenes_servicio ORDER BY creado_en DESC')
+      .prepare(`${LIST_QUERY} ORDER BY o.creado_en DESC`)
       .all();
     return c.json({ success: true, data: results });
   }
@@ -49,43 +56,29 @@ ordenes.post('/', async (c) => {
   const body = await c.req.json<{
     profesiograma_id: string;
     empresa_id: string;
-    cargo_id?: string;
+    cargo_id: string;
     candidato_nombre?: string;
-    candidato_documento?: string;
-    momento: 'I' | 'P' | 'R' | 'PI' | 'RL';
+    candidato_id?: string;
+    tipo_momento: 'I' | 'P' | 'R' | 'PI' | 'RL';
     examenes_json?: unknown[];
-    restricciones_json?: unknown[];
   }>();
-  if (!body.profesiograma_id || !body.empresa_id || !body.momento) {
+  if (!body.profesiograma_id || !body.empresa_id || !body.cargo_id || !body.tipo_momento) {
     return c.json({ success: false, error: 'Faltan campos requeridos' }, 400);
   }
   const id  = crypto.randomUUID();
   const now = new Date().toISOString();
   await c.env.DB.prepare(`
     INSERT INTO ordenes_servicio
-    (id, profesiograma_id, cargo_id, empresa_id, candidato_nombre, candidato_documento,
-     momento, examenes_json, restricciones_json, estado, creado_por, creado_en, actualizado_en)
-    VALUES (?,?,?,?,?,?,?,?,?,'emitida',?,?,?)
+    (id, profesiograma_id, cargo_id, empresa_id, tipo_momento, candidato_nombre, candidato_id,
+     examenes_json, generado_por, creado_en)
+    VALUES (?,?,?,?,?,?,?,?,?,?)
   `).bind(
-    id, body.profesiograma_id, body.cargo_id ?? null, body.empresa_id,
-    body.candidato_nombre ?? null, body.candidato_documento ?? null, body.momento,
+    id, body.profesiograma_id, body.cargo_id, body.empresa_id, body.tipo_momento,
+    body.candidato_nombre ?? '', body.candidato_id ?? '',
     JSON.stringify(body.examenes_json ?? []),
-    JSON.stringify(body.restricciones_json ?? []),
-    user.sub, now, now
+    user.sub, now
   ).run();
   return c.json({ success: true, id }, 201);
-});
-
-// PATCH /api/ordenes/:id/estado
-ordenes.patch('/:id/estado', async (c) => {
-  const { estado } = await c.req.json<{ estado: string }>();
-  if (!['emitida', 'vigente', 'anulada'].includes(estado)) {
-    return c.json({ success: false, error: 'Estado inválido' }, 400);
-  }
-  await c.env.DB
-    .prepare('UPDATE ordenes_servicio SET estado=?, actualizado_en=? WHERE id=?')
-    .bind(estado, new Date().toISOString(), c.req.param('id')).run();
-  return c.json({ success: true });
 });
 
 export default ordenes;

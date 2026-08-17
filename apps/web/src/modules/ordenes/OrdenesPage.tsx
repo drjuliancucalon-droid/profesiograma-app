@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Printer, ClipboardList, ShieldCheck } from 'lucide-react';
+import { Printer, ClipboardList, ShieldCheck, Loader2 } from 'lucide-react';
 import { useProfesiogramaStore } from '../../store/profesiogramaStore';
 import { EXAMENES_MATRIZ } from '../../shared/data/legal';
+import { guardarProfesiograma } from '../../shared/lib/saveProfesiograma';
+import { api } from '../../shared/lib/api';
 
 const MOMENTOS = ['I', 'P', 'R', 'PI', 'RL'] as const;
 
 export function OrdenesPage() {
-  const { generatedData, empresaInfo } = useProfesiogramaStore();
+  const { generatedData, empresaInfo, profesionalInfo, savedRecord, setSavedRecord } = useProfesiogramaStore();
   const [requestRole, setRequestRole] = useState('');
   const [requestType, setRequestType] = useState<(typeof MOMENTOS)[number]>('I');
   const [candidate, setCandidate] = useState({ name: '', id: '' });
@@ -15,6 +17,8 @@ export function OrdenesPage() {
   const [idealExams, setIdealExams] = useState<string[]>([]);
   const [activeExams, setActiveExams] = useState<string[]>([]);
   const [orderNumber] = useState(() => Math.floor(Math.random() * 10000));
+  const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!requestRole || !generatedData.length) return;
@@ -24,7 +28,7 @@ export function OrdenesPage() {
     const bas: string[] = [];
     for (const e of EXAMENES_MATRIZ) {
       const val = matriz[e.key];
-      if (val && typeof val === 'object' && val[requestType]) bas.push(e.label);
+      if (val && typeof val === 'object' && val[requestType]) bas.push(e.fullLabel);
     }
     if (typeof matriz.laboratorio === 'string' && matriz.laboratorio.length > 3) bas.push(matriz.laboratorio);
     setMandatoryExams(bas);
@@ -34,6 +38,37 @@ export function OrdenesPage() {
 
   const toggleExam = (name: string) => {
     setActiveExams((prev) => (prev.includes(name) ? prev.filter((e) => e !== name) : [...prev, name]));
+  };
+
+  const handleGuardarEImprimir = async () => {
+    setSaving(true);
+    setErrorMsg(null);
+    try {
+      let record = savedRecord;
+      if (!record || !record.cargoIds[requestRole]) {
+        record = await guardarProfesiograma(empresaInfo, profesionalInfo, generatedData);
+        setSavedRecord(record);
+      }
+      const cargoId = record.cargoIds[requestRole];
+      if (!cargoId) throw new Error('No se encontró el cargo guardado. Vuelve a guardar el profesiograma en Informe.');
+
+      const res = await api.post<{ success: boolean; id?: string; error?: string }>('/ordenes', {
+        profesiograma_id: record.profesiogramaId,
+        empresa_id: record.empresaId,
+        cargo_id: cargoId,
+        tipo_momento: requestType,
+        candidato_nombre: candidate.name || undefined,
+        candidato_id: candidate.id || undefined,
+        examenes_json: activeExams,
+      });
+      if (!res.success) throw new Error(res.error ?? 'No se pudo guardar la orden');
+
+      window.print();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Error al guardar la orden.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (!generatedData.length) {
@@ -101,8 +136,10 @@ export function OrdenesPage() {
             <input placeholder="Nombre Completo" className="w-full bg-slate-800 border border-slate-700 p-3 rounded-xl text-sm outline-none mb-2 text-slate-200" value={candidate.name} onChange={(e) => setCandidate({ ...candidate, name: e.target.value })} />
             <input placeholder="Cédula / ID" className="w-full bg-slate-800 border border-slate-700 p-3 rounded-xl text-sm outline-none text-slate-200" value={candidate.id} onChange={(e) => setCandidate({ ...candidate, id: e.target.value })} />
           </div>
-          <button onClick={() => window.print()} disabled={!requestRole || !activeExams.length} className="w-full bg-slate-950 border border-slate-700 text-white py-3 rounded-xl font-bold flex justify-center gap-2 hover:bg-slate-800 disabled:opacity-40 transition-all">
-            <Printer size={16} /> Imprimir Orden
+          {errorMsg && <p className="text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-lg p-2">{errorMsg}</p>}
+          <button onClick={handleGuardarEImprimir} disabled={!requestRole || !activeExams.length || saving} className="w-full bg-slate-950 border border-slate-700 text-white py-3 rounded-xl font-bold flex justify-center gap-2 hover:bg-slate-800 disabled:opacity-40 transition-all">
+            {saving ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
+            {saving ? 'Guardando...' : 'Guardar e Imprimir Orden'}
           </button>
         </div>
       </div>

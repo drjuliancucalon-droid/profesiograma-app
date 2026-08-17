@@ -40,6 +40,10 @@ interface ProfesiogramaState {
 
   logoStyles: { size: number; align: 'left' | 'center' | 'right'; marginY: number };
   setLogoStyles: (partial: Partial<{ size: number; align: 'left' | 'center' | 'right'; marginY: number }>) => void;
+
+  /** IDs reales en D1 una vez que el profesiograma actual se guardó. */
+  savedRecord: { empresaId: string; profesionalId: string; profesiogramaId: string; cargoIds: Record<string, string> } | null;
+  setSavedRecord: (record: ProfesiogramaState['savedRecord']) => void;
 }
 
 function setByPath<T extends Record<string, unknown>>(obj: T, path: string, value: unknown): T {
@@ -61,7 +65,7 @@ export const useProfesiogramaStore = create<ProfesiogramaState>((set) => ({
   removeJob: (index) => set((s) => ({ jobsList: s.jobsList.filter((_, i) => i !== index) })),
 
   generatedData: [],
-  setGeneratedData: (data) => set({ generatedData: data }),
+  setGeneratedData: (data) => set({ generatedData: data, savedRecord: null }),
   updateCargo: (index, path, value) =>
     set((s) => ({
       generatedData: s.generatedData.map((row, i) =>
@@ -90,4 +94,7 @@ export const useProfesiogramaStore = create<ProfesiogramaState>((set) => ({
 
   logoStyles: { size: 96, align: 'center', marginY: 0 },
   setLogoStyles: (partial) => set((s) => ({ logoStyles: { ...s.logoStyles, ...partial } })),
+
+  savedRecord: null,
+  setSavedRecord: (record) => set({ savedRecord: record }),
 }));

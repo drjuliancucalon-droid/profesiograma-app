@@ -119,14 +119,16 @@ profesiograma.post(
         user.sub, now, now
       ).run();
 
+      const cargos: Array<{ id: string; cargo: string }> = [];
       for (const cd of cargos_data) {
+        const cargoId = crypto.randomUUID();
         await c.env.DB.prepare(`
           INSERT INTO cargos
           (id, profesiograma_id, grupo_ocupacional, nombre_cargo, descripcion,
            competencias, requisitos_fisicos, peligros_riesgos, ia_raw_json, creado_en, actualizado_en)
           VALUES (?,?,?,?,?,?,?,?,?,?,?)
         `).bind(
-          crypto.randomUUID(), profId,
+          cargoId, profId,
           cd.grupo_ocupacional ?? 'General',
           cd.cargo ?? '',
           (cd.perfil_cargo as Record<string, unknown>)?.descripcion ?? null,
@@ -136,6 +138,7 @@ profesiograma.post(
           JSON.stringify(cd),
           now, now
         ).run();
+        cargos.push({ id: cargoId, cargo: String(cd.cargo ?? '') });
       }
 
       await c.env.DB.prepare(`
@@ -144,7 +147,7 @@ profesiograma.post(
         VALUES (?,?,1,?,?,'Creación inicial',?)
       `).bind(crypto.randomUUID(), profId, JSON.stringify(body), user.sub, now).run();
 
-      return c.json({ success: true, id: profId }, 201);
+      return c.json({ success: true, id: profId, cargos }, 201);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error interno';
       return c.json({ success: false, error: msg }, 500);
@@ -152,13 +155,16 @@ profesiograma.post(
   }
 );
 
-// GET /api/profesiograma
+// GET /api/profesiograma — lista todos, o filtra por empresa_id si se indica
 profesiograma.get('/', requireAuth, async (c) => {
   const empresaId = c.req.query('empresa_id');
-  if (!empresaId) return c.json({ success: false, error: 'empresa_id requerido' }, 400);
-  const { results } = await c.env.DB
-    .prepare('SELECT * FROM profesiogramas WHERE empresa_id = ? ORDER BY creado_en DESC')
-    .bind(empresaId).all();
+  const { results } = empresaId
+    ? await c.env.DB
+        .prepare('SELECT p.*, e.nombre AS empresa_nombre FROM profesiogramas p LEFT JOIN empresas e ON e.id = p.empresa_id WHERE p.empresa_id = ? ORDER BY p.creado_en DESC')
+        .bind(empresaId).all()
+    : await c.env.DB
+        .prepare('SELECT p.*, e.nombre AS empresa_nombre FROM profesiogramas p LEFT JOIN empresas e ON e.id = p.empresa_id ORDER BY p.creado_en DESC')
+        .all();
   return c.json({ success: true, data: results });
 });
 
@@ -167,12 +173,18 @@ profesiograma.get('/:id', requireAuth, async (c) => {
   const id = c.req.param('id');
   const row = await c.env.DB
     .prepare('SELECT * FROM profesiogramas WHERE id = ? LIMIT 1')
-    .bind(id).first();
+    .bind(id).first<Record<string, unknown>>();
   if (!row) return c.json({ success: false, error: 'No encontrado' }, 404);
   const { results: cargos } = await c.env.DB
-    .prepare('SELECT * FROM cargos WHERE profesiograma_id = ? ORDER BY orden_index')
+    .prepare('SELECT * FROM cargos WHERE profesiograma_id = ? ORDER BY creado_en')
     .bind(id).all();
-  return c.json({ success: true, data: { ...row, cargos } });
+  const empresa = await c.env.DB
+    .prepare('SELECT * FROM empresas WHERE id = ? LIMIT 1')
+    .bind(row.empresa_id as string).first();
+  const profesional = row.profesional_id
+    ? await c.env.DB.prepare('SELECT * FROM profesionales WHERE id = ? LIMIT 1').bind(row.profesional_id as string).first()
+    : null;
+  return c.json({ success: true, data: { ...row, cargos, empresa, profesional } });
 });
 
 export default profesiograma;

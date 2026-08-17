@@ -149,7 +149,8 @@ button {
 
 @media print {
   @page {
-    margin: 12mm;
+    size: landscape;
+    margin: 10mm;
   }
   /* Redefine las variables de color oscuras a versiones claras — arregla de una vez
      todos los estilos en línea (badges, tarjetas) que las consumen directamente. */

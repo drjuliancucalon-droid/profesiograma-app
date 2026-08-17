@@ -5,9 +5,7 @@ import { useProfesiogramaStore } from '../../store/profesiogramaStore';
 import { EditableDiv } from '../../shared/ui/EditableDiv';
 import { MomentoBadge } from '../../shared/ui/MomentoBadge';
 import { MARCO_LEGAL, DESCRIPCION_PRUEBAS, INSTRUCTIVO_STEPS, EXAMENES_MATRIZ } from '../../shared/data/legal';
-import { api } from '../../shared/lib/api';
-
-interface Empresa { id: string; nombre: string; nit: string | null }
+import { guardarProfesiograma } from '../../shared/lib/saveProfesiograma';
 
 type Section = 'all' | 'presentacion' | 'matriz' | 'recomendaciones' | 'pruebas' | 'legal';
 
@@ -20,57 +18,17 @@ const TABS: { id: Section; label: string }[] = [
 ];
 
 export function InformePage() {
-  const { generatedData, empresaInfo, profesionalInfo, logoStyles, setLogoStyles, updateCargo, toggleMomento } = useProfesiogramaStore();
+  const { generatedData, empresaInfo, profesionalInfo, logoStyles, setLogoStyles, updateCargo, toggleMomento, setSavedRecord } = useProfesiogramaStore();
   const [section, setSection] = useState<Section>('all');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const handleSave = async () => {
-    if (!empresaInfo.nombre.trim()) {
-      setSaveMsg({ type: 'error', text: 'Ingresa el nombre de la empresa antes de guardar (pestaña Configuración).' });
-      return;
-    }
     setSaving(true);
     setSaveMsg(null);
     try {
-      // 1. Buscar o crear la empresa
-      const listRes = await api.get<{ success: boolean; data?: Empresa[] }>('/empresas');
-      const existing = listRes.data?.find((e) =>
-        (empresaInfo.nit && e.nit && e.nit.trim() === empresaInfo.nit.trim()) ||
-        (!empresaInfo.nit && e.nombre.trim().toLowerCase() === empresaInfo.nombre.trim().toLowerCase())
-      );
-      let empresaId = existing?.id;
-      if (!empresaId) {
-        const createRes = await api.post<{ success: boolean; id?: string; error?: string }>('/empresas', {
-          nombre: empresaInfo.nombre,
-          nit: empresaInfo.nit || undefined,
-          responsable_sg_sst: empresaInfo.responsable || undefined,
-        });
-        if (!createRes.success || !createRes.id) throw new Error(createRes.error ?? 'No se pudo crear la empresa');
-        empresaId = createRes.id;
-      }
-
-      // 2. Buscar o crear el profesional (el backend lo requiere siempre)
-      const profRes = await api.post<{ success: boolean; id?: string; error?: string }>('/profesionales', {
-        nombre: profesionalInfo.nombre.trim() || 'No especificado',
-        cedula: profesionalInfo.cedula || undefined,
-        titulo: profesionalInfo.titulo || undefined,
-        licencia: profesionalInfo.licencia || undefined,
-        celular: profesionalInfo.celular || undefined,
-        correo: profesionalInfo.correo || undefined,
-      });
-      if (!profRes.success || !profRes.id) throw new Error(profRes.error ?? 'No se pudo guardar el profesional');
-      const profesionalId = profRes.id;
-
-      // 3. Guardar el profesiograma con los cargos generados
-      const saveRes = await api.post<{ success: boolean; id?: string; error?: string }>('/profesiograma', {
-        empresa_id: empresaId,
-        profesional_id: profesionalId,
-        fecha_emision: empresaInfo.fecha || undefined,
-        cargos_data: generatedData,
-      });
-      if (!saveRes.success) throw new Error(saveRes.error ?? 'No se pudo guardar el profesiograma');
-
+      const record = await guardarProfesiograma(empresaInfo, profesionalInfo, generatedData);
+      setSavedRecord(record);
       setSaveMsg({ type: 'success', text: 'Profesiograma guardado correctamente. Puedes verlo en Historial.' });
     } catch (err) {
       setSaveMsg({ type: 'error', text: err instanceof Error ? err.message : 'Error al guardar.' });
@@ -200,7 +158,7 @@ export function InformePage() {
               <div className="text-sm">
                 <p className="font-serif font-bold text-slate-100 print:text-black">{profesionalInfo.nombre || 'Dr. / Especialista SST'}</p>
                 {profesionalInfo.titulo && <p className="text-slate-400 print:text-black text-xs mt-1 leading-tight">{profesionalInfo.titulo}</p>}
-                {profesionalInfo.cedula && <p className="text-slate-500 print:text-black text-[10px] mt-1">C.C. {profesionalInfo.cedula}</p>}
+                {profesionalInfo.cedula && !profesionalInfo.cedula.startsWith('sin-cedula-') && <p className="text-slate-500 print:text-black text-[10px] mt-1">C.C. {profesionalInfo.cedula}</p>}
                 {profesionalInfo.licencia && <p className="text-slate-500 print:text-black text-[10px]">Lic. {profesionalInfo.licencia}</p>}
               </div>
             </div>

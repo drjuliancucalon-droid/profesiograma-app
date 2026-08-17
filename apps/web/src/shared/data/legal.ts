@@ -27,12 +27,12 @@ export const INSTRUCTIVO_STEPS = [
 ] as const;
 
 export const EXAMENES_MATRIZ = [
-  { key: 'fisico', label: 'Físico' },
-  { key: 'osteomuscular', label: 'Osteomus...' },
-  { key: 'psicosensometrico', label: 'Psicosenso...' },
-  { key: 'audiometria', label: 'Audio...' },
-  { key: 'visiometria', label: 'Visio...' },
-  { key: 'electrocardiograma', label: 'EKG' },
-  { key: 'glicemia', label: 'Glicemia' },
-  { key: 'perfil_lipidico', label: 'Lípidos' },
+  { key: 'fisico', label: 'Físico', fullLabel: 'Examen Físico' },
+  { key: 'osteomuscular', label: 'Osteomus...', fullLabel: 'Examen Osteomuscular' },
+  { key: 'psicosensometrico', label: 'Psicosenso...', fullLabel: 'Prueba Psicosensométrica' },
+  { key: 'audiometria', label: 'Audio...', fullLabel: 'Audiometría Tonal' },
+  { key: 'visiometria', label: 'Visio...', fullLabel: 'Visiometría / Optometría' },
+  { key: 'electrocardiograma', label: 'EKG', fullLabel: 'Electrocardiograma (EKG)' },
+  { key: 'glicemia', label: 'Glicemia', fullLabel: 'Glicemia' },
+  { key: 'perfil_lipidico', label: 'Lípidos', fullLabel: 'Perfil Lipídico' },
 ] as const;
