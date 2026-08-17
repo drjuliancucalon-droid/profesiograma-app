@@ -34,9 +34,22 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3)
   throw new Error('Max retries reached');
 }
 
-async function callGemini(apiKey: string, systemPrompt: string, userPrompt: string): Promise<string> {
+// Distintos modelos de Gemini tienen cuotas gratuitas independientes (algunos modelos nuevos/
+// preview traen cuotas diarias muy bajas). Se intenta cada uno en orden hasta que uno responda,
+// en vez de depender de un único modelo cuya cuota puede agotarse.
+const GEMINI_MODEL_CANDIDATES = [
+  'gemini-2.5-flash-lite',
+  'gemini-flash-lite-latest',
+  'gemini-3.1-flash-lite',
+  'gemini-2.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.6-flash',
+  'gemini-flash-latest',
+];
+
+async function callGeminiModel(model: string, apiKey: string, systemPrompt: string, userPrompt: string): Promise<string> {
   const resp = await fetchWithRetry(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -51,6 +64,18 @@ async function callGemini(apiKey: string, systemPrompt: string, userPrompt: stri
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error('Gemini no devolvió respuesta válida');
   return text;
+}
+
+async function callGemini(apiKey: string, systemPrompt: string, userPrompt: string): Promise<string> {
+  let lastError: Error | null = null;
+  for (const model of GEMINI_MODEL_CANDIDATES) {
+    try {
+      return await callGeminiModel(model, apiKey, systemPrompt, userPrompt);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+  throw lastError ?? new Error('Todos los modelos de Gemini fallaron');
 }
 
 async function callOpenAiCompatible(

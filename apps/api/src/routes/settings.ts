@@ -56,4 +56,21 @@ settings.put('/ai-keys', async (c) => {
   return c.json({ success: true });
 });
 
+// GET /api/settings/gemini-models — diagnóstico: lista los modelos Gemini realmente
+// disponibles para la key configurada (temporal, para depurar límites de cuota por modelo).
+settings.get('/gemini-models', async (c) => {
+  const { results } = await c.env.DB
+    .prepare("SELECT value FROM settings WHERE key = 'gemini_api_key' LIMIT 1")
+    .all<{ value: string }>();
+  const key = results[0]?.value || c.env.GEMINI_API_KEY;
+  if (!key) return c.json({ success: false, error: 'No hay GEMINI_API_KEY configurada' }, 400);
+
+  const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+  const data = await resp.json<{ models?: Array<{ name: string; supportedGenerationMethods?: string[]; displayName?: string }> }>();
+  const models = (data.models ?? [])
+    .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+    .map((m) => ({ name: m.name.replace('models/', ''), displayName: m.displayName }));
+  return c.json({ success: true, data: models });
+});
+
 export default settings;
