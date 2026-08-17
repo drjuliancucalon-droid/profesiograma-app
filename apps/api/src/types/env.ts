@@ -7,3 +7,16 @@ export interface Env {
   ENVIRONMENT: string;
   CORS_ORIGIN: string;
 }
+
+// Extiende el contexto Hono con variables tipadas
+declare module 'hono' {
+  interface ContextVariableMap {
+    user: {
+      sub: string;
+      email: string;
+      rol: 'admin' | 'medico' | 'rrhh';
+      iat: number;
+      exp: number;
+    };
+  }
+}

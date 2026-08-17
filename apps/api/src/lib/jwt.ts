@@ -1,54 +1,48 @@
-export interface JwtPayload {
-  sub: string;
-  email: string;
-  rol: 'admin' | 'medico' | 'rrhh';
-  exp: number;
+const ALG = { name: 'HMAC', hash: 'SHA-256' };
+
+async function getKey(secret: string): Promise<CryptoKey> {
+  const enc = new TextEncoder();
+  return crypto.subtle.importKey('raw', enc.encode(secret), ALG, false, ['sign', 'verify']);
 }
 
-type JwtInput = Omit<JwtPayload, 'exp'>;
-
-function toB64Url(s: string): string {
-  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+function b64url(buf: ArrayBuffer): string {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
-function fromB64Url(s: string): string {
-  const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
-  return atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
+function decodeB64(s: string): string {
+  return atob(s.replace(/-/g, '+').replace(/_/g, '/'));
 }
 
-async function hmac(secret: string, data: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
-  return btoa(String.fromCharCode(...new Uint8Array(sig)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-
-export async function createJwt(
+export async function signJwt(
   secret: string,
-  payload: JwtInput,
-  ttlSeconds = 900
+  payload: Record<string, unknown>,
+  expiresInSeconds = 3600
 ): Promise<string> {
-  const h = toB64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const p = toB64Url(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + ttlSeconds }));
-  const sig = await hmac(secret, `${h}.${p}`);
-  return `${h}.${p}.${sig}`;
+  const header = b64url(new TextEncoder().encode(JSON.stringify({ alg: 'HS256', typ: 'JWT' })));
+  const body   = b64url(new TextEncoder().encode(JSON.stringify({
+    ...payload,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + expiresInSeconds,
+  })));
+  const key = await getKey(secret);
+  const sig = await crypto.subtle.sign(ALG, key, new TextEncoder().encode(`${header}.${body}`));
+  return `${header}.${body}.${b64url(sig)}`;
 }
 
-export async function verifyJwt(secret: string, token: string): Promise<JwtPayload | null> {
-  const parts = token.split('.');
-  if (parts.length !== 3) return null;
-  const [h, p, sig] = parts;
-  const expected = await hmac(secret, `${h}.${p}`);
-  if (expected !== sig) return null;
+export async function verifyJwt(
+  secret: string,
+  token: string
+): Promise<Record<string, unknown> | null> {
   try {
-    const payload = JSON.parse(fromB64Url(p)) as JwtPayload;
-    if (payload.exp < Math.floor(Date.now() / 1000)) return null;
+    const [h, b, s] = token.split('.');
+    if (!h || !b || !s) return null;
+    const key = await getKey(secret);
+    const sigBuf = Uint8Array.from(decodeB64(s), c => c.charCodeAt(0));
+    const valid  = await crypto.subtle.verify(ALG, key, sigBuf, new TextEncoder().encode(`${h}.${b}`));
+    if (!valid) return null;
+    const payload = JSON.parse(decodeB64(b)) as Record<string, unknown>;
+    if (typeof payload.exp === 'number' && payload.exp < Math.floor(Date.now() / 1000)) return null;
     return payload;
   } catch {
     return null;

@@ -4,18 +4,19 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
-    "build": "tsc",
+    "build": "tsc --noEmit",
     "deploy": "wrangler deploy",
-    "db:migrate": "wrangler d1 execute profesiograma-db --file=src/db/schema.sql",
-    "db:migrate:remote": "wrangler d1 execute profesiograma-db --remote --file=src/db/schema.sql"
+    "db:migrate": "wrangler d1 migrations apply profesiograma-db",
+    "db:migrate:remote": "wrangler d1 migrations apply profesiograma-db --remote"
   },
   "dependencies": {
+    "@cloudflare/puppeteer": "^0.0.9",
     "hono": "^4.4.0",
-    "hono-jwt": "^0.0.1"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240725.0",
+    "@cloudflare/workers-types": "^4.20250101.0",
     "typescript": "^5.5.0",
-    "wrangler": "^3.65.0"
+    "wrangler": "^3.80.0"
   }
 }
