@@ -42,8 +42,10 @@ app.use('*', cors({
   allowHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
-app.use('/api/profesiograma/generate', rateLimitMiddleware(10, 60_000));
-app.use('/api/auth/login', rateLimitMiddleware(5, 60_000));
+app.use('/api/profesiograma/generate', rateLimitMiddleware(10, 60_000, 'generate'));
+app.use('/api/profesiograma/extract-cargos', rateLimitMiddleware(10, 60_000, 'extract-cargos'));
+app.use('/api/auth/login', rateLimitMiddleware(5, 60_000, 'login'));
+app.use('/api/auth/change-password', rateLimitMiddleware(5, 60_000, 'change-password'));
 
 // ── Health ────────────────────────────────────────────────────────
 app.get('/health', (c) =>

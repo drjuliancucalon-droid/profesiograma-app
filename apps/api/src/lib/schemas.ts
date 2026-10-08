@@ -10,6 +10,18 @@ export const refreshSchema = z.object({
   refresh_token: z.string().min(1, 'refresh_token requerido'),
 });
 
+export const changePasswordSchema = z
+  .object({
+    current_password: z.string().min(1, 'contraseña actual requerida'),
+    new_password: z.string().min(8, 'la nueva contraseña debe tener al menos 8 caracteres').max(200),
+    // Refresh token de la sesión actual: se conserva abierta; las demás se cierran.
+    refresh_token: z.string().optional(),
+  })
+  .refine((d) => d.new_password !== d.current_password, {
+    message: 'la nueva contraseña debe ser distinta a la actual',
+    path: ['new_password'],
+  });
+
 export const logoutSchema = z.object({
   refresh_token: z.string().optional(),
 });
@@ -56,6 +68,15 @@ export const ordenSchema = z.object({
 export const profesiogramaGenerateSchema = z.object({
   cargo: z.string().trim().min(1, 'cargo requerido').max(500),
   profesiograma_id: z.string().optional(),
+});
+
+export const extractCargosSchema = z.object({
+  texto: z.string().trim().min(1, 'texto requerido').max(30_000, 'el texto supera el máximo de 30.000 caracteres'),
+});
+
+/** Respuesta esperada de la IA al extraer cargos de un documento. */
+export const aiCargosResponseSchema = z.object({
+  cargos: z.array(z.string()),
 });
 
 export const profesiogramaCreateSchema = z.object({

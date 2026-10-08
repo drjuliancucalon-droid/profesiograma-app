@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Building2, BrainCircuit, ClipboardList, History, LogOut, ShieldCheck, FileText, Settings, Users, Building } from 'lucide-react';
+import { LayoutDashboard, Building2, BrainCircuit, ClipboardList, History, LogOut, ShieldCheck, FileText, Settings, Users, Building, KeyRound } from 'lucide-react';
 import { useAuthStore } from './store/authStore';
 import { LoginPage } from './modules/auth/LoginPage';
 import { DashboardPage } from './modules/dashboard/DashboardPage';
@@ -11,6 +11,7 @@ import { InformePage } from './modules/informe/InformePage';
 import { SettingsPage } from './modules/settings/SettingsPage';
 import { UsuariosPage } from './modules/usuarios/UsuariosPage';
 import { OrganizacionesPage } from './modules/organizaciones/OrganizacionesPage';
+import { CuentaPage } from './modules/cuenta/CuentaPage';
 
 function ProtectedRoute({ children, adminOnly, superadminOnly }: { children: React.ReactNode; adminOnly?: boolean; superadminOnly?: boolean }) {
   const { token, user } = useAuthStore();
@@ -39,6 +40,7 @@ function Layout({ children }: { children: React.ReactNode }) {
   if (user?.es_superadmin) {
     navItems = [...navItems, { to: '/organizaciones', label: 'Organizaciones', icon: Building }];
   }
+  navItems = [...navItems, { to: '/cuenta', label: 'Mi cuenta', icon: KeyRound }];
 
   return (
     <div style={{ display: 'flex', minHeight: '100dvh', background: 'var(--color-bg)' }}>
@@ -194,6 +196,16 @@ export function App() {
           <ProtectedRoute superadminOnly>
             <Layout>
               <OrganizacionesPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/cuenta"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <CuentaPage />
             </Layout>
           </ProtectedRoute>
         }

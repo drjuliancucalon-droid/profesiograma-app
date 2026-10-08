@@ -13,13 +13,16 @@ import type { HonoEnv } from '../types/env';
  */
 export function rateLimitMiddleware(
   max: number,
-  windowMs: number
+  windowMs: number,
+  /** Nombre de la ruta: cada una lleva su propio contador (si no, login y generate se restarían cuota entre sí). */
+  scope: string
 ): (c: Context<HonoEnv>, next: Next) => Promise<Response | void> {
   return async (c, next) => {
-    const ip =
+    const clientIp =
       c.req.header('cf-connecting-ip') ??
       c.req.header('x-forwarded-for') ??
       'unknown';
+    const ip = `${scope}:${clientIp}`;
     const now = Date.now();
     const windowStart = Math.floor(now / windowMs) * windowMs;
 

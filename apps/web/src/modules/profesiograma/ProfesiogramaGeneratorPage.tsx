@@ -4,6 +4,7 @@ import { BrainCircuit, Plus, Trash2, Upload, Loader2 } from 'lucide-react';
 import { useProfesiogramaStore } from '../../store/profesiogramaStore';
 import { api } from '../../shared/lib/api';
 import { EmpresaForm } from './EmpresaForm';
+import { ImportCargosModal } from './ImportCargosModal';
 import type { CargoProfesiograma } from '@profesiograma/shared-types';
 
 export function ProfesiogramaGeneratorPage() {
@@ -14,6 +15,7 @@ export function ProfesiogramaGeneratorPage() {
   } = useProfesiogramaStore();
 
   const [currentJob, setCurrentJob] = useState('');
+  const [importFile, setImportFile] = useState<File | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const showNotif = (type: 'success' | 'error', text: string) => {
@@ -106,9 +108,29 @@ export function ProfesiogramaGeneratorPage() {
             <button className="btn btn-primary" onClick={handleAddJob} style={{ padding: '8px 16px' }}><Plus size={16} /></button>
           </div>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', border: '1px dashed var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: '0.8rem', marginBottom: 16 }}>
-            <Upload size={15} /> Importar desde Excel/CSV/PDF (próximamente)
-            <input type="file" accept=".csv,.xlsx,.xls,.pdf" style={{ display: 'none' }} disabled />
+            <Upload size={15} /> Importar cargos desde Excel, CSV, Word o PDF
+            <input
+              type="file"
+              accept=".csv,.xlsx,.docx,.pdf"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) setImportFile(file);
+                e.target.value = ''; // permite volver a elegir el mismo archivo
+              }}
+            />
           </label>
+          {importFile && (
+            <ImportCargosModal
+              file={importFile}
+              existing={jobsList}
+              onAdd={(cargos) => {
+                cargos.forEach(addJob);
+                showNotif('success', `${cargos.length} cargo(s) importados.`);
+              }}
+              onClose={() => setImportFile(null)}
+            />
+          )}
           {jobsList.length > 0 ? (
             <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
               {jobsList.map((job, i) => (

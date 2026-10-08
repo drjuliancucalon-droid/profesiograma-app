@@ -4,7 +4,8 @@ import { signJwt, verifyJwt } from '../lib/jwt';
 import { hashPassword, verifyPassword } from '../lib/password';
 import { newId, nowIso } from '../lib/id';
 import { parseBody } from '../lib/validate';
-import { loginSchema, refreshSchema, logoutSchema } from '../lib/schemas';
+import { loginSchema, refreshSchema, logoutSchema, changePasswordSchema } from '../lib/schemas';
+import { requireAuth } from '../middleware/auth';
 import { auditLog } from '../lib/audit';
 
 const auth = new Hono<HonoEnv>();
@@ -132,6 +133,46 @@ auth.post('/logout', async (c) => {
     }
   }
   return c.json({ success: true, message: 'Sesión cerrada' });
+});
+
+// POST /api/auth/change-password — requiere sesión. Verifica la contraseña actual,
+// guarda la nueva y cierra las demás sesiones (otros dispositivos). Un error de
+// contraseña actual responde 400 (no 401) para no disparar el cierre de sesión
+// automático del frontend.
+auth.post('/change-password', requireAuth, async (c) => {
+  const parsed = await parseBody(c, changePasswordSchema);
+  if (!parsed.ok) return parsed.response;
+  const { current_password, new_password, refresh_token } = parsed.data;
+  const authUser = c.get('user');
+
+  const user = await c.env.DB
+    .prepare('SELECT id, password_hash, password_salt, password_iterations FROM users WHERE id = ? AND activo = 1 LIMIT 1')
+    .bind(authUser.sub)
+    .first<{ id: string; password_hash: string; password_salt: string; password_iterations: number }>();
+  if (!user) return c.json({ success: false, error: 'Usuario no encontrado' }, 404);
+
+  const valid = await verifyPassword(current_password, {
+    hash: user.password_hash,
+    salt: user.password_salt,
+    iterations: user.password_iterations,
+  });
+  if (!valid) {
+    auditLog(c, { action: 'auth.password.change_failed', entityType: 'user', entityId: user.id, userId: user.id });
+    return c.json({ success: false, error: 'La contraseña actual no es correcta' }, 400);
+  }
+
+  const { hash, salt, iterations } = await hashPassword(new_password);
+  await c.env.DB.batch([
+    c.env.DB
+      .prepare('UPDATE users SET password_hash = ?, password_salt = ?, password_iterations = ?, actualizado_en = ? WHERE id = ?')
+      .bind(hash, salt, iterations, nowIso(), user.id),
+    c.env.DB
+      .prepare('UPDATE sessions SET revoked = 1 WHERE user_id = ? AND revoked = 0 AND refresh_token != ?')
+      .bind(user.id, refresh_token ?? ''),
+  ]);
+
+  auditLog(c, { action: 'auth.password.change', entityType: 'user', entityId: user.id, userId: user.id });
+  return c.json({ success: true, message: 'Contraseña actualizada' });
 });
 
 // GET /api/auth/me
